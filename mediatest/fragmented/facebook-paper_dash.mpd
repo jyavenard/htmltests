@@ -1,0 +1,32 @@
+<MPD type="static" xmlns="urn:mpeg:DASH:schema:MPD:2011" profiles="urn:mpeg:dash:profile:full:2011" minBufferTime="PT1.5S" mediaPresentationDuration="PT0H2M0.19S">
+ <ProgramInformation moreInformationURL="http://gpac.sourceforge.net">
+  <Title>Media Presentation Description for file facebook-paper.mp4 generated with GPAC </Title>
+ </ProgramInformation>
+ <Period start="PT0S" duration="PT0H2M0.19S">
+  <AdaptationSet>
+   <ContentComponent id="1" contentType="video"/>
+   <ContentComponent id="2" contentType="audio" lang="eng"/>
+   <Representation id="1" mimeType="video/mp4" codecs="avc1.4d401f,mp4a.40.02" width="1920" height="1080" sampleRate="48000" numChannels="2" lang="eng" startWithSAP="1" bandwidth="2944958">
+    <SegmentList timescale="1000" duration="9928">
+     <Initialization sourceURL="facebook-paper_dash.mp4"/>
+     <SegmentURL media="facebook-paper1.m4s"/>
+     <SegmentURL media="facebook-paper2.m4s"/>
+     <SegmentURL media="facebook-paper3.m4s"/>
+     <SegmentURL media="facebook-paper4.m4s"/>
+     <SegmentURL media="facebook-paper5.m4s"/>
+     <SegmentURL media="facebook-paper6.m4s"/>
+     <SegmentURL media="facebook-paper7.m4s"/>
+     <SegmentURL media="facebook-paper8.m4s"/>
+     <SegmentURL media="facebook-paper9.m4s"/>
+     <SegmentURL media="facebook-paper10.m4s"/>
+     <SegmentURL media="facebook-paper11.m4s"/>
+     <SegmentURL media="facebook-paper12.m4s"/>
+     <SegmentURL media="facebook-paper13.m4s"/>
+     <SegmentURL media="facebook-paper14.m4s"/>
+     <SegmentURL media="facebook-paper15.m4s"/>
+     <SegmentURL media="facebook-paper16.m4s"/>
+    </SegmentList>
+   </Representation>
+  </AdaptationSet>
+ </Period>
+</MPD>
