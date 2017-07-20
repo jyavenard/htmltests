@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Media Source Extensions test page</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <script type="text/javascript">
+        var eventsToTrack = [
+            'loadedmetadata',
+            'seeking',
+            'seeked',
+            'play',
+            'playing',
+            'pause',
+            'error'
+        ];
+
+        var sourceBufferEventsToTrack = [
+            'updatestart',
+            'update',
+            'error',
+            'abort',
+            'updateend'
+        ];
+
+    // Audio
+    // 64: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816289151.isma?c=us&n=2906&v=3&e=1436994239&t=PcotCfxpHPchuNCx34zewAIPSss&d=cadmium&p=fake_pbcid
+    // 96: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816290489.isma?c=us&n=2906&v=3&e=1436995699&t=SmMvuLMw6XGD-vp2r6XojzYWC1M&d=cadmium&p=fake_pbcid
+
+     //Video 
+     // 235:  http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374941621.ismv?c=us&n=2906&v=3&e=1436994604&t=CtzjnZxTA2sKj70YnKMcQI8UgyA&d=cadmium&p=fake_pbcid
+     // 375   http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374941867.ismv?c=us&n=2906&v=3&e=1436997829&t=0Pxq9yhLN5Wq1U4lte5rwMe1Z0k&d=cadmium&p=fake_pbcid
+     // 560:  http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942257.ismv?c=us&n=2906&v=3&e=1436996036&t=M6h6gYYL0IroyAkRpJSostWxOhU&d=cadmium&p=fake_pbcid 
+     // 750:  http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942196.ismv?c=us&n=2906&v=3&e=1436998011&t=0zFVgxTU7LVPQCyCwekcaNNOHic&d=cadmium&p=fake_pbcid
+     // 1050: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942477.ismv?c=us&n=2906&v=3&e=1436996095&t=DhDi1mib01hpaOBoRni28z5kWm4&d=cadmium&p=fake_pbcid
+     // 1750: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942968.ismv?c=us&n=2906&v=3&e=1436998993&t=j_ZL_vrrTYJzzTRWXkh8ZbUJQcQ&d=cadmium&p=fake_pbcid
+     // 2350: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374943231.ismv?c=us&n=2906&v=3&e=1436999146&t=001clVmk7HqAQoNdDEuTAD0-uEM&d=cadmium&p=fake_pbcid
+     // 3000: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374943300.ismv?c=us&n=2906&v=3&e=1436999083&t=bJyLTPR2-1v1S_FaT3HeTrJsHgE&d=cadmium&p=fake_pbcid
+     // 4300: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374943898.ismv?c=us&n=2906&v=3&e=1436999396&t=-jTUS3uh8HEvMjq66fHLqz7rBCs&d=cadmium&p=fake_pbcid
+     // 5800: http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374944211.ismv?c=us&n=2906&v=3&e=1436999329&t=NyhkrRFgk4XDVh-s4vjF6f8Ac00&d=cadmium&p=fake_pbcid
+       
+
+        var audioChunks = [
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816290489.isma/range/0-898?c=us&n=2906&v=3&e=1436995699&t=SmMvuLMw6XGD-vp2r6XojzYWC1M&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816290489.isma/range/15487-113925?c=us&n=2906&v=3&e=1436995699&t=SmMvuLMw6XGD-vp2r6XojzYWC1M&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816290489.isma/range/113926-309081?c=us&n=2906&v=3&e=1436995699&t=SmMvuLMw6XGD-vp2r6XojzYWC1M&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816290489.isma/range/309082-455534?c=us&n=2906&v=3&e=1436995699&t=SmMvuLMw6XGD-vp2r6XojzYWC1M&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/1816290489.isma/range/455535-723819?c=us&n=2906&v=3&e=1436995699&t=SmMvuLMw6XGD-vp2r6XojzYWC1M&d=cadmium&p=fake_pbcid",
+        ];
+
+        var videoChunks = [
+            //235
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374941621.ismv/range/0-1053?c=us&n=2906&v=3&e=1436994604&t=CtzjnZxTA2sKj70YnKMcQI8UgyA&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374941621.ismv/range/15599-376137?c=us&n=2906&v=3&e=1436994604&t=CtzjnZxTA2sKj70YnKMcQI8UgyA&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374941621.ismv/range/376138-706514?c=us&n=2906&v=3&e=1436994604&t=CtzjnZxTA2sKj70YnKMcQI8UgyA&d=cadmium&p=fake_pbcid",
+            
+            //560
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942257.ismv/range/237-1053?c=us&n=2906&v=3&e=1436996036&t=M6h6gYYL0IroyAkRpJSostWxOhU&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942257.ismv/range/1776652-2452330?c=us&n=2906&v=3&e=1436996036&t=M6h6gYYL0IroyAkRpJSostWxOhU&d=cadmium&p=fake_pbcid",
+            
+            //750
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942196.ismv/range/237-1054?c=us&n=2906&v=3&e=1436998011&t=0zFVgxTU7LVPQCyCwekcaNNOHic&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942196.ismv/range/3012101-3451531?c=us&n=2906&v=3&e=1436998011&t=0zFVgxTU7LVPQCyCwekcaNNOHic&d=cadmium&p=fake_pbcid",
+            
+            //1050
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942477.ismv/range/237-1054?c=us&n=2906&v=3&e=1436996095&t=DhDi1mib01hpaOBoRni28z5kWm4&d=cadmium&p=fake_pbcid",
+            "http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942477.ismv/range/4929948-5593571?c=us&n=2906&v=3&e=1436996095&t=DhDi1mib01hpaOBoRni28z5kWm4&d=cadmium&p=fake_pbcid",
+            
+            //1750
+            'http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942968.ismv/range/237-1059?c=us&n=2906&v=3&e=1436998993&t=j_ZL_vrrTYJzzTRWXkh8ZbUJQcQ&d=cadmium&p=fake_pbcid',
+            'http://ipv4_1.lagg0.c021.sjc002.ix.nflxvideo.net/374942968.ismv/range/7537436-8339892?c=us&n=2906&v=3&e=1436998993&t=j_ZL_vrrTYJzzTRWXkh8ZbUJQcQ&d=cadmium&p=fake_pbcid'
+            
+        ];
+
+        function log(s, ex) {
+            var logDiv = document.getElementById('logDiv');
+            logDiv.innerHTML += '<div>' + s + '</div>';
+            if (ex) {
+                logDiv.innerHTML += '<pre style="color:gray; margin:0px;">' + ex + '</pre>';
+            }
+        };
+
+        function download(req, onSuccess) {
+            var url = typeof req === 'string' ? req : req.url;
+            var post = req.post;
+            var responseType = req.responseType || 'arraybuffer';
+            var headers = req.headers;
+
+            var xhr = new XMLHttpRequest();
+            xhr.onload = function (e) {
+                if (xhr.status == 200) {
+                    onSuccess(new Uint8Array(xhr.response));
+                } else {
+                    log('XHR status is ' + xhr.status + ', expected to be 200.');
+                }
+            };
+            xhr.onabort = function (e) {
+                log('XHR onabort');
+            };
+            xhr.onerror = function (e) {
+                log('XHR onerror, Status: ' + xhr.status);
+            };
+            xhr.open(post ? 'POST' : 'GET', url);
+            xhr.responseType = responseType;
+            headers && Object.keys(headers).forEach(function (key) {
+                xhr.setRequestHeader(key, headers[key]);
+            });
+            post ? xhr.send() : xhr.send(post);
+        };
+
+        function appendChunks(source, chunkList, onSuccess) {
+            function appendNext() {
+                var chunk = chunkList.shift();
+                if (chunk) {
+                    download(chunk, function (data) {
+                        log('Appending: ' + chunk);
+                        try {
+                            source.appendBuffer(data);
+                            log('Waiting for onupdateend');
+                        }
+                        catch (e) {
+                            log('Exception while appending', e);
+                        }
+                    });
+                } else {
+                    done();
+                }
+            };
+            source.addEventListener('updateend', onUpdateEnd);
+            function onUpdateEnd() {
+                removeChunks();
+                appendNext();
+            };
+            appendNext();
+
+            function done() {
+                source.removeEventListener('updateend', onUpdateEnd);
+                removeChunks();
+                onSuccess();
+            };
+        };
+
+        function removeChunks() {
+            if (videoChunks.length > 0 || audioChunks.length > 0 || videoElement.currentTime < 10) {
+                // wait untill we appended all chunks and current time is past 10 sec before removing
+                return;
+            }
+            removeChunks = function () { };
+
+            log('Removing media');
+            try {
+                audioSource.remove(0, 4);
+                videoSource.remove(0, 4);
+            }
+            catch (e) {
+                log('Exception while removing', e);
+            }
+        };
+
+        var downloadCache = {};
+        var videoElement;
+        var audioSource;
+        var videoSource;
+
+        var lastTimeUpdateOn;
+
+        function main() {
+            var MediaSource = window.MediaSource;
+            var URL = window.URL;
+
+            var mediaSource = new MediaSource();
+            var url = URL.createObjectURL(mediaSource);
+            videoElement = document.getElementById('videoElement');
+            eventsToTrack.forEach(function (eventName) {
+                videoElement.addEventListener(eventName, function (e) {
+                    log('videoElement event: ' + eventName);
+                });
+            });
+            videoElement.pause();
+
+            mediaSource.addEventListener('sourceopen', function (e) {
+                log('videoElement event: sourceopen');
+                try {
+                    audioSource = mediaSource.addSourceBuffer('audio/mp4; codecs="mp4a.40.5"');
+                }
+                catch (e) {
+                    log('Exception calling addSourceBuffer for audio', e);
+                    return;
+                }
+
+                try {
+                    videoSource = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.4D4028"');
+                }
+                catch (e) {
+                    log('Exception calling addSourceBuffer for video', e);
+                    return;
+                }
+
+                sourceBufferEventsToTrack.forEach(function (eventName) {
+                    audioSource.addEventListener(eventName, function (e) {
+                        log('audioSource event: ' + eventName);
+                    });
+                    videoSource.addEventListener(eventName, function (e) {
+                        log('videoSource event: ' + eventName);
+                    });
+                });
+
+                log('Appending first init segments');
+                appendChunks(audioSource, audioChunks.splice(0, 1));
+                appendChunks(videoSource, videoChunks.splice(0, 1));
+            });
+
+            videoElement.addEventListener('loadedmetadata', function (e) {
+                log('Appending remaining chunks');
+                appendChunks(audioSource, audioChunks, function () {
+                    appendChunks(videoSource, videoChunks, function () {
+                        log('Calling .play');
+                        videoElement.play();
+                    });
+                });                
+            });
+
+            videoElement.addEventListener('timeupdate', function (e) {
+                var now = new Date();
+
+                if (!(now - lastTimeUpdateOn < 5000)) {
+                    lastTimeUpdateOn = now;
+                    log('videoElement event: timeudpate, currentTime: ' + videoElement.currentTime.toFixed(3));
+                }
+
+                removeChunks();
+
+            });
+
+            videoElement.src = url;
+        };
+    </script>
+</head>
+<body onload="main();">
+    <video controls autoplay id="videoElement" style="width: 640px; height: 360px"></video>
+    <div id="logDiv" style="background-color: Black; color: white; font-family: Aerial; padding: 10px">
+    </div>
+</body>
+</html>

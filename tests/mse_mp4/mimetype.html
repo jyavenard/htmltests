@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>MediaSource API Demo</title>
+    <!--
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+    <style>
+        ::selection {
+            color: #fff;
+            background: pink;
+        }
+        html, body {
+            overflow: hidden;
+            height: 100%;
+        }
+        body {
+            margin: 0;
+        }
+        body {
+            color: #222;
+            font-family: 'Open Sans', arial, sans-serif;
+            display: -webkit-flex;
+            -webkit-align-items: center;
+            -webkit-justify-content: center;
+            -webkit-flex-direction: column;
+            display: -ms-flex;
+            -ms-align-items: center;
+            -ms-justify-content: center;
+            -ms-flex-direction: column;
+            display: -moz-flex;
+            -moz-align-items: center;
+            -moz-justify-content: center;
+            -moz-flex-direction: column;
+            display: -o-flex;
+            -o-align-items: center;
+            -o-justify-content: center;
+            -o-flex-direction: column;
+        }
+        details {
+            position: absolute;
+            top: 1em;
+            left: 1em;
+            margin: 1em 0;
+            cursor: pointer;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid rgba(0,0,0,0.3);
+            border-radius: 5px;
+            max-width: 600px;
+            font-size: 10pt;
+            z-index: 100;
+        }
+        details > div {
+            margin: 10px 0;
+        }
+        details blockquote {
+            font-style: italic;
+        }
+        pre:not(#log) {
+            background: #eee;
+            border-radius: 5px;
+            padding: 3px 17px 20px 17px;
+            border: 1px solid #ccc;
+            color: navy;
+        }
+        #log {
+            margin: 0 1em;
+        }
+        code {
+            font-weight: bold;
+        }
+        section {
+            display: -webkit-flex;
+        }
+    </style>
+-->
+</head>
+<body>
+
+<h3>Appending .mp4 video chunks using the Media Source API</h3>
+
+<section>
+    <video controls autoplay width="320" height="240"></video>
+    <p>permalink: <a id="permalink" href=""></a></p>
+    <p><pre id="log"></pre></p>
+</section>
+
+<script>
+    function Logger(id) {
+        this.el = document.getElementById('log');
+    }
+    var log_start = Date.now();
+    Logger.prototype.log = function(msg) {
+        var fragment = document.createDocumentFragment();
+        fragment.appendChild(document.createTextNode((Date.now() - log_start) + ': ' + msg));
+        fragment.appendChild(document.createElement('br'));
+        this.el.appendChild(fragment);
+    };
+
+    Logger.prototype.clear = function() {
+        this.el.textContent = '';
+    };
+
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+</script>
+<script>
+if (!!!window.MediaSource) {
+    logger.log('MediaSource API is not available');
+}
+
+var mediaSource = new MediaSource();
+
+mediaSource.addEventListener('sourceended', function(e) { logger.log('mediaSource.sourceended'); });
+mediaSource.addEventListener('sourceclose', function(e) { logger.log('mediaSource.sourceclose'); });
+logger.log("audio/mp4; codecs=mp4a.40.2 \t" + MediaSource.isTypeSupported("audio/mp4; codecs=mp4a.40.2"));
+logger.log("audio/mp4; codecs=mp4a.40.29\t" + MediaSource.isTypeSupported("audio/mp4; codecs=mp4a.40.29"));
+logger.log("audio/mp4; codecs=mp4a.40.5 \t" + MediaSource.isTypeSupported("audio/mp4; codecs=mp4a.40.5"));
+logger.log("audio/mp4; codecs=mp4a.40.99\t" + MediaSource.isTypeSupported("audio/mp4; codecs=mp4a.40.99"));
+</script>
+</body>
+</html>

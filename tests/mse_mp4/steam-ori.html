@@ -1,0 +1,82 @@
+<video controls width="400" height="300" style="background-color: black"></video>
+
+<script>
+	var sourceBufferType = "video/mp4;codecs=avc1.4d4032,mp4a.40.2";
+	var video = document.querySelector('video');
+	var mediaSource = new MediaSource();
+	video.src = window.URL.createObjectURL(mediaSource);
+	console.log(mediaSource);
+	
+	mediaSource.addEventListener("sourceopen", function(e) {
+		console.log("source open", video.readyState);
+		var sourceBuffer = this.addSourceBuffer(sourceBufferType);
+		console.log("duration", video.duration);
+		console.log("source buffer created", sourceBuffer, sourceBuffer.mode);
+				
+		var chunkId = 0;
+		
+		var appendChunk = function(chunk) {
+			GET(chunk, function(typedArray) {
+				console.log(typedArray);
+				
+				sourceBuffer.appendBuffer(typedArray);
+			});
+		}
+		
+		sourceBuffer.addEventListener("updateend", function(e) {
+			console.log("update end", video.readyState);
+			console.log("duration", video.duration);
+			
+			if (sourceBuffer.buffered.length > 0) {
+				var steamCalculatedDuration = sourceBuffer.buffered.end(0) - sourceBuffer.buffered.start(0);
+				console.log("Current Duration: ", steamCalculatedDuration, " isGreater5: ", steamCalculatedDuration > 5);
+			}
+			
+			if(chunkId < 2) {
+				appendChunk("steam-" + ++chunkId + ".mp4");
+			} else {
+				// CALLING THIS CAUSES THE VIDEO TO PLAY IN FIREFOX
+				// mediaSource.endOfStream();
+		
+				console.log("final result:");
+				console.log(sourceBuffer.buffered.start(0), sourceBuffer.buffered.end(0), sourceBuffer.buffered.length);
+				
+				if (sourceBuffer.buffered.length > 1) {
+					console.log(sourceBuffer.buffered.start(1), sourceBuffer.buffered.end(1));
+				}
+				
+				var steamCalculatedDuration = sourceBuffer.buffered.end(0) - sourceBuffer.buffered.start(0);
+				console.log("Duration: ", steamCalculatedDuration, " isGreater5: ", steamCalculatedDuration > 5);
+				
+				var startTime = sourceBuffer.buffered.start(0);
+				video.play();
+				console.log("Preparing to play", video.readyState);
+				
+				setTimeout(function() {
+					console.log("Seeking to ", startTime);
+					video.currentTime = startTime;
+				}, 50);
+				
+			}
+		}, false);
+		
+		appendChunk("steam-init.mp4");
+	}, false);
+
+	
+function GET(url, callback) {
+	var xhr = new XMLHttpRequest();
+	xhr.open('GET', url, true);
+	xhr.responseType = 'arraybuffer';
+	xhr.send();
+
+	xhr.onload = function(e) {
+		if (xhr.status != 200) {
+			alert("Unexpected status code " + xhr.status + " for " + url);
+			return false;
+		}
+		callback(new Uint8Array(xhr.response));
+	};
+}
+
+</script>

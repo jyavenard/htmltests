@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<!--
+Copyright 2012 Eric Bidelman
+Modified 2014-08-29 Gerald Squelart
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Author: Eric Bidelman (ebidel@)
+-->
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>MediaSource API Demo</title>
+    <!--
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+    <style>
+        ::selection {
+            color: #fff;
+            background: pink;
+        }
+        html, body {
+            overflow: hidden;
+            height: 100%;
+        }
+        body {
+            margin: 0;
+        }
+        body {
+            color: #222;
+            font-family: 'Open Sans', arial, sans-serif;
+            display: -webkit-flex;
+            -webkit-align-items: center;
+            -webkit-justify-content: center;
+            -webkit-flex-direction: column;
+            display: -ms-flex;
+            -ms-align-items: center;
+            -ms-justify-content: center;
+            -ms-flex-direction: column;
+            display: -moz-flex;
+            -moz-align-items: center;
+            -moz-justify-content: center;
+            -moz-flex-direction: column;
+            display: -o-flex;
+            -o-align-items: center;
+            -o-justify-content: center;
+            -o-flex-direction: column;
+        }
+        details {
+            position: absolute;
+            top: 1em;
+            left: 1em;
+            margin: 1em 0;
+            cursor: pointer;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid rgba(0,0,0,0.3);
+            border-radius: 5px;
+            max-width: 600px;
+            font-size: 10pt;
+            z-index: 100;
+        }
+        details > div {
+            margin: 10px 0;
+        }
+        details blockquote {
+            font-style: italic;
+        }
+        pre:not(#log) {
+            background: #eee;
+            border-radius: 5px;
+            padding: 3px 17px 20px 17px;
+            border: 1px solid #ccc;
+            color: navy;
+        }
+        #log {
+            margin: 0 1em;
+        }
+        code {
+            font-weight: bold;
+        }
+        section {
+            display: -webkit-flex;
+        }
+    </style>
+-->
+</head>
+<body>
+
+<h3>Appending .mp4 video chunks using the Media Source API</h3>
+
+<section>
+    <video controls autoplay width="320" height="240"></video>
+    <p>permalink: <a id="permalink" href=""></a></p>
+    <p><pre id="log"></pre></p>
+</section>
+
+<script>
+    function Logger(id) {
+        this.el = document.getElementById('log');
+    }
+    var log_start = Date.now();
+    Logger.prototype.log = function(msg) {
+        var fragment = document.createDocumentFragment();
+        fragment.appendChild(document.createTextNode((Date.now() - log_start) + ': ' + msg));
+        fragment.appendChild(document.createElement('br'));
+        this.el.appendChild(fragment);
+    };
+
+    Logger.prototype.clear = function() {
+        this.el.textContent = '';
+    };
+
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+</script>
+<script>
+function parseSearch(search) {
+    var params = {};
+    if (search.length > 1 && search[0] == '?') {
+        search = search.substring(1);
+        params = JSON.parse(
+                '{"' + search.replace(/&/g, '","').replace(/=/g, '":"') + '"}',
+                function (key, value) {
+                    return key === "" ? value : decodeURIComponent(value)
+                }
+        );
+    }
+    return params;
+}
+
+var params = parseSearch(window.location.search);
+
+var FILE = params['file'] || 'avc3-init.mp4';
+logger.log('file=' + FILE);
+
+var MIME = params['mime'] || 'video/mp4';
+logger.log('mime=' + MIME);
+var CODECS = params['codecs'] || 'avc3.640020';
+logger.log('codecs=' + CODECS);
+
+var NUM_CHUNKS = params['chunks'] || 5;
+logger.log('chunks=' + NUM_CHUNKS + ' (number of chunks to divide the file into)');
+
+var EOS_CHUNK = params['eos_chunk'] || NUM_CHUNKS;
+logger.log('eos_chunk=' + EOS_CHUNK + ' (1..chunks: chunk# at which mediaSource.endOfStream() is called; use 0 for no call)');
+
+var EOS_DELAY = params['eos_delay'] || -1;
+logger.log('eos_delay=' + EOS_DELAY + ' (delay in ms between last appendBuffer and endOfStream, -1 to wait for updateend, -x to wait x ms after updateend)');
+
+var DELAY_CHUNK = params['delay_chunk'] || 0;
+logger.log('delay_chunk=' + DELAY_CHUNK + ' (delay in ms between reading each chunk)');
+
+var START = params['start'] || -1;
+logger.log('start=' + START + ' (start playing time, -1 for none)');
+
+var permalink = document.getElementById('permalink');
+permalink.href =
+        window.location.protocol
+        + '//' + window.location.host
+        + window.location.pathname
+        + '?'
+        + 'chunks=' + encodeURIComponent(NUM_CHUNKS)
+        + '&eos_chunk=' + encodeURIComponent(EOS_CHUNK)
+        + '&eos_delay=' + encodeURIComponent(EOS_DELAY)
+        + '&delay_chunk=' + encodeURIComponent(DELAY_CHUNK)
+        + '&start=' + encodeURIComponent(START)
+;
+permalink.textContent = permalink.href;
+
+var video = document.querySelector('video');
+video.addEventListener('loadstart', function(e){ logger.log('video.loadstart'); });
+video.addEventListener('progress', function(e){ logger.log('video.progress'); });
+video.addEventListener('suspend', function(e){ logger.log('video.suspend'); });
+video.addEventListener('abort', function(e){ logger.log('video.abort'); });
+video.addEventListener('error', function(e){ logger.log('video.error'); });
+video.addEventListener('emptied', function(e){ logger.log('video.emptied'); });
+video.addEventListener('stalled', function(e){ logger.log('video.stalled'); });
+video.addEventListener('loadedmetadata', function(e){ logger.log('video.loadedmetadata'); logger.log('video.height=' + video.videoHeight); logger.log('video.width=' + video.videoWidth); logger.log('video.duration=' + video.duration); });
+video.addEventListener('canplay', function(e){ logger.log('video.canplay'); });
+video.addEventListener('canplaythrough', function(e){ logger.log('video.canplaythrough'); });
+video.addEventListener('playing', function(e){ logger.log('video.playing'); });
+video.addEventListener('waiting', function(e){ logger.log('video.waiting'); });
+video.addEventListener('seeking', function(e){ logger.log('video.seeking'); });
+video.addEventListener('seeked', function(e){ logger.log('video.seeked'); });
+video.addEventListener('ended', function(e){ logger.log('video.ended'); });
+video.addEventListener('durationchange', function(e){ logger.log('video.durationchange'); });
+//video.addEventListener('timeupdate', function(e){ logger.log('video.timeupdate '); });
+video.addEventListener('play', function(e){ logger.log('video.play'); });
+video.addEventListener('pause', function(e){ logger.log('video.pause'); });
+video.addEventListener('ratechange', function(e){ logger.log('video.ratechange'); });
+video.addEventListener('resize', function(e){ logger.log('video.resize'); });
+video.addEventListener('volumechange', function(e){ logger.log('video.volumechange'); });
+
+video.addEventListener('loadeddata', function(e){
+    logger.log('video.loadeddata');
+    if (START >= 0) {
+        video.currentTime = START;
+    }
+});
+
+if (!!!window.MediaSource) {
+    logger.log('MediaSource API is not available');
+}
+
+var mediaSource = new MediaSource();
+
+//document.querySelector('[data-num-chunks]').textContent = NUM_CHUNKS;
+
+video.src = window.URL.createObjectURL(mediaSource);
+
+mediaSource.addEventListener('sourceended', function(e) { logger.log('mediaSource.sourceended'); });
+mediaSource.addEventListener('sourceclose', function(e) { logger.log('mediaSource.sourceclose'); });
+
+mediaSource.addEventListener('sourceopen', function(e) {
+    logger.log('mediaSource.sourceopen -> mediaSource readyState: ' + this.readyState);
+
+    logger.log('mediaSource.addSourceBuffer(\'' + MIME + (CODECS ? ("; codecs=" + CODECS) : "") + ')');
+    try {
+        var sourceBuffer = mediaSource.addSourceBuffer(MIME + (CODECS ? ("; codecs=" + CODECS) : ""));
+    } catch (e) {
+        logger.log('addSourceBuffer exception: ' + e);
+        throw e;
+    }
+    sourceBuffer.addEventListener('updatestart', function(e){ logger.log('sourceBuffer.updatestart'); });
+    sourceBuffer.addEventListener('update', function(e){ logger.log('sourceBuffer.update'); });
+    sourceBuffer.addEventListener('updateend', function(e){ logger.log('sourceBuffer.updateend'); });
+    sourceBuffer.addEventListener('error', function(e){ logger.log('sourceBuffer.error'); });
+    sourceBuffer.addEventListener('abort', function(e){ logger.log('sourceBuffer.abort'); });
+
+    logger.log('mediaSource readyState: ' + this.readyState);
+
+    GET(FILE, function(uInt8Array) {
+        var file = new Blob([uInt8Array], {type: MIME});
+        var chunkSize = Math.ceil(file.size / NUM_CHUNKS);
+
+        logger.log('chunkSize:' + chunkSize + ', totalSize:' + file.size);
+
+        // Slice the video into NUM_CHUNKS and append each to the media element.
+        var i = 0;
+
+        (function readChunk_(i) {
+            var reader = new FileReader();
+
+            // Reads aren't guaranteed to finish in the same order they're started in,
+            // so we need to read + append the next chunk after the previous reader
+            // is done (onload is fired).
+            reader.onload = function(e) {
+                var a = new Uint8Array(e.target.result);
+                if (a.length > 0) {
+                    try {
+                        sourceBuffer.appendBuffer(a);
+                    } catch (e) {
+                        logger.log('sourceBuffer.appendBuffer(UintArray of length ' + a.length + ') exception: ' + e);
+                        throw e;
+                    }
+                    logger.log('appending chunk:' + (i + 1) + ' size=' + a.length + ' readyState=' + mediaSource.readyState + ' updating=' + sourceBuffer.updating);
+                } else {
+                    logger.log('empty chunk:' + (i + 1) + ' readyState=' + mediaSource.readyState + ' updating=' + sourceBuffer.updating);
+                }
+                if (i == EOS_CHUNK - 1) {
+                    if (EOS_DELAY == 0) {
+                        logger.log('mediaSource.endOfStream() updating=' + sourceBuffer.updating);
+                        try {
+                            mediaSource.endOfStream();
+                        } catch (e) {
+                            logger.log('endOfStream exception: ' + e);
+                            throw e;
+                        }
+                    } else if (EOS_DELAY < -1) {
+                        logger.log('wait ' + (-EOS_DELAY) + 'ms after updateend before calling endOfStream()');
+                        sourceBuffer.addEventListener('updateend', function(e) {
+                            logger.log('updateend -> wait ' + (-EOS_DELAY) + 'ms before mediaSource.endOfStream() - updating=' + sourceBuffer.updating);
+                            setTimeout(function() {
+                                logger.log('updateend + ' + (-EOS_DELAY) + 'ms -> mediaSource.endOfStream() - updating=' + sourceBuffer.updating);
+                                try {
+                                    mediaSource.endOfStream();
+                                } catch (e) {
+                                    logger.log('endOfStream exception: ' + e);
+                                    throw e;
+                                }
+                            }, -EOS_DELAY);
+                        })
+                    } else if (EOS_DELAY < 0) {
+                        logger.log('wait for updateend before calling endOfStream()');
+                        sourceBuffer.addEventListener('updateend', function(e) {
+                            logger.log('updateend -> mediaSource.endOfStream() updating=' + sourceBuffer.updating);
+                            try {
+                                mediaSource.endOfStream();
+                            } catch (e) {
+                                logger.log('endOfStream exception: ' + e);
+                                throw e;
+                            }
+                        })
+                    } else {
+                        logger.log('will call mediaSource.endOfStream() after ' + EOS_DELAY + 'ms');
+                        window.setTimeout(function(){logger.log('mediaSource.endOfStream() updating=' + sourceBuffer.updating);mediaSource.endOfStream();}, EOS_DELAY);
+                    }
+                }
+                if (i < NUM_CHUNKS) {
+                    if (video.paused) {
+                        logger.log('video.play()');
+                        video.play(); // Start playing after 1st chunk is appended.
+                    }
+                    if (DELAY_CHUNK == 0) {
+                        readChunk_(++i);
+                    } else {
+                        window.setTimeout(readChunk_, DELAY_CHUNK, ++i);
+                    }
+                }
+            };
+
+            var startByte = chunkSize * i;
+            var chunk = file.slice(startByte, startByte + chunkSize);
+
+            reader.readAsArrayBuffer(chunk);
+        })(i);  // Start the recursive call by self calling.
+    });
+
+}, false);
+
+function GET(url, callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.send();
+
+    xhr.onload = function(e) {
+        if (xhr.status != 200) {
+            logger.log("Unexpected status code " + xhr.status + " for " + url);
+            return false;
+        } else {
+            logger.log('URL ' + url + ' loaded.');
+        }
+        callback(new Uint8Array(xhr.response));
+    };
+}
+</script>
+</body>
+</html>

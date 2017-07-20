@@ -1,0 +1,88 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: basic functionality</title>
+</head>
+<body>
+<section>
+  <pre id="log"></pre></p>
+</section>
+<pre id="test">
+	
+<script src="common.js"></script>
+<script>
+//var params = parseSearch(window.location.search);
+var logger = new Logger('log');
+
+// Avoid making trouble for people who fix rounding bugs.
+function fuzzyEquals(a, b) {
+  return Math.abs(a - b) < 0.01;
+}
+
+runWithMSE(function(ms, el) {
+  function testMSE()
+  {
+    var b="MediaSource" in el,c="WebKitMediaSource"in el;
+    return b?b=MediaSource.isTypeSupported('video/mp4; codecs="avc1.42c00d"'):c&&(c=WebKitMediaSource.isTypeSupported('video/mp4; codecs="avc1.42c00d"')),b||c
+  }
+
+  logger.log(testMSE() ? "mse okay" : "mse not supported");
+
+  el.controls = true;
+  once(ms, 'sourceopen').then(function() {
+    logger.log("Receive a sourceopen event");
+
+		el.addEventListener('loadstart', function(e){ logger.log('* el.loadstart'); });
+		el.addEventListener('progress', function(e){ logger.log('* el.progress'); });
+		el.addEventListener('suspend', function(e){ logger.log('* el.suspend'); });
+		el.addEventListener('abort', function(e){ logger.log('* el.abort'); });
+		el.addEventListener('error', function(e){ logger.log('* el.error'); });
+		el.addEventListener('emptied', function(e){ logger.log('* el.emptied'); });
+		el.addEventListener('stalled', function(e){ logger.log('* el.stalled'); });
+		el.addEventListener('loadedmetadata', function(e){ logger.log('el.loadedmetadata'); logger.log('el.height=' + el.videoHeight); logger.log('el.width=' + el.videoWidth); logger.log('el.duration=' + el.duration); });
+		el.addEventListener('canplay', function(e){ logger.log('* el.canplay'); });
+		el.addEventListener('canplaythrough', function(e){ logger.log('* el.canplaythrough'); });
+		el.addEventListener('playing', function(e){ logger.log('* el.playing'); });
+		el.addEventListener('waiting', function(e){ logger.log('* el.waiting'); });
+		el.addEventListener('seeking', function(e){ logger.log('* el.seeking'); });
+		el.addEventListener('seeked', function(e){ logger.log('* el.seeked'); });
+		el.addEventListener('ended', function(e){ logger.log('* el.ended'); });
+		el.addEventListener('durationchange', function(e){ logger.log('* el.durationchange'); logger.log('el.duration=' + el.duration); });
+		//el.addEventListener('timeupdate', function(e){ logger.log('* el.timeupdate '); });
+		el.addEventListener('play', function(e){ logger.log('* el.play'); });
+		el.addEventListener('pause', function(e){ logger.log('* el.pause'); });
+		el.addEventListener('ratechange', function(e){ logger.log('* el.ratechange'); });
+		el.addEventListener('resize', function(e){ logger.log('* el.resize'); });
+		el.addEventListener('volumechange', function(e){ logger.log('* el.volumechange'); });
+		el.addEventListener('loadeddata', function(e){ logger.log('* el.loadeddata'); });
+
+    var sb = ms.addSourceBuffer("video/mp4; codecs=\"avc1.64000d,mp4a.40.2\"");
+    fetchAndLoad(sb, 'facebook-paper-', ['init'], '.mp4')
+    .then(once.bind(null, el, 'loadedmetadata'))
+    .then(function() {
+      var p = once(el, 'seeking');
+      ms.duration = 10;
+      el.play();
+      el.currentTime = 5;
+      return p;
+    })
+    .then(function() {
+       logger.log("Got seeking event");
+       var promises = [];
+       promises.push(once(el, 'seeked'));
+       promises.push(fetchAndLoad(sb, 'facebook-paper-', ['moof'], '.mp4'));
+       return Promise.all(promises);
+    })
+    .then(function() {
+      ok(true, "Got seeked event");
+      ok(el.currentTime >= 5, "Time >= 5");
+      once(el, 'ended').then(SimpleTest.finish.bind(SimpleTest));
+      ms.endOfStream();
+    });
+  });
+});
+
+</script>
+</pre>
+</body>
+</html>

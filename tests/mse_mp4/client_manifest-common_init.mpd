@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD type="static" xmlns="urn:mpeg:DASH:schema:MPD:2011" profiles="urn:mpeg:dash:profile:isoff-live:2011" minBufferTime="PT1.11S" mediaPresentationDuration="PT9M32.560S">
+<!-- MPEG DASH ISO BMFF test stream with avc3 and common initialisation segments -->
+<!-- BBC Research & Development -->
+<!-- For more information see http://rdmedia.bbc.co.uk -->
+<ProgramInformation>
+	<Title>Adaptive Bitrate Test Stream from BBC Research and Development - Full stream with common initialisation segments</Title>
+	<Source>BBC Research and Development</Source>
+</ProgramInformation>
+<Period duration="PT9M32.560S">
+	<AdaptationSet startWithSAP="2" segmentAlignment="true" id="1" scanType="progressive" mimeType="video/mp4" >
+		<ContentComponent id="1" contentType="video" />
+		<SegmentTemplate startNumber="1" timescale="1000" duration="3840" media="http://rdmedia.bbc.co.uk/dash/ondemand/bbb/avc3/1/$RepresentationID$/$Number$" initialization="http://rdmedia.bbc.co.uk/dash/ondemand/bbb/avc3/1/V5.mp4/IS" />
+		<Representation id="V1.mp4" codecs="avc3.4d4015" height="288" width="512" bandwidth="356296" />
+		<Representation id="V2.mp4" codecs="avc3.4d401e" height="396" width="704" bandwidth="619088" />
+		<Representation id="V3.mp4" codecs="avc3.64001f" height="504" width="896" bandwidth="1330608" />
+		<Representation id="V4.mp4" codecs="avc3.640020" height="720" width="1280" bandwidth="2501216" />
+		<Representation id="V5.mp4" codecs="avc3.640028" height="1080" width="1920" bandwidth="4487408" />
+	</AdaptationSet>
+	<AdaptationSet startWithSAP="2" segmentAlignment="true" id="2" audioSamplingRate="48000" lang="eng" mimeType="audio/mp4" >
+		<AudioChannelConfiguration schemeIdUri="urn:mpeg:dash:23003:3:audio_channel_configuration:2011" value="2"/>
+		<ContentComponent id="1" contentType="audio" lang="eng"/>
+		<SegmentTemplate startNumber="1" timescale="1000" duration="3840" media="http://rdmedia.bbc.co.uk/dash/ondemand/bbb/avc3/1/$RepresentationID$/$Number$" initialization="http://rdmedia.bbc.co.uk/dash/ondemand/bbb/avc3/1/A2-aud.mp4/IS" />
+		<Representation id="A2-aud.mp4" codecs="mp4a.40.2" bandwidth="95792" />
+		<Representation id="A3-aud.mp4" codecs="mp4a.40.2" bandwidth="127800" />
+		<Representation id="A4-aud.mp4" codecs="mp4a.40.2" bandwidth="159816" />
+	</AdaptationSet>
+</Period>
+</MPD>

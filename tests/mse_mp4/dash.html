@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>MSE simple DASH demo</title>
+  </head>
+  <body>
+    <video id="v" controls></video>
+    <script>
+      function fetch(url, fetched_callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.responseType = "arraybuffer";
+
+        var loaded = function (event) {
+          console.log("loaded status=" + xhr.status + " xhr.response" + xhr.response);
+          if (xhr.status == 200 || xhr.status == 206) {
+            fetched_callback(xhr.response);
+          } else {
+            ok(false, "Fetch failed headers=" + xhr.getAllResponseHeaders());
+          }
+        };
+
+        xhr.addEventListener("load", loaded, false);
+        xhr.send();
+      }
+  
+      // Generated with:
+      //  mp4box -dash 10000 -rap -segment-name bruce -subsegs-per-sidx 5 bruce_vs_ironman.mp4
+      //  http://gpac.wp.mines-telecom.fr/mp4box/dash/
+      var segments = [
+        "bruceinit.mp4",
+        "bruce1.m4s",
+        "bruce2.m4s",
+        "bruce3.m4s",
+        "bruce4.m4s",
+        "bruce5.m4s",
+        "bruce6.m4s",
+        "bruce7.m4s",
+      ];
+      var segmentIndex = 0;
+
+      var video = document.getElementById("v");
+      var ms = new MediaSource();
+      var vs;
+      var mediaobj;
+
+      function getNextSegment() {
+        if (segmentIndex == segments.length) {
+          console.log("fetched all segments.");
+          vs.removeEventListener("update", getNextSegment, false);
+            video.play();
+        } else {
+          console.log("Fetching " + segments[segmentIndex] + " index=" + segmentIndex);
+          fetch(segments[segmentIndex], appendSegment);
+          segmentIndex++;
+          if (segmentIndex == 3) {
+            video.play();
+          }
+        }
+      }
+
+      function appendSegment(buf) {
+        try {
+          vs.appendBuffer(new Uint8Array(buf));
+        } catch (e) {
+          console.log("caught : " +e);
+        }
+        //getNextSegment();
+      }
+      
+      ms.addEventListener("sourceopen", function(e) {
+        mediaobj = video.mozSrcObject;
+        vs = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+        vs.addEventListener("update", getNextSegment, false);
+        getNextSegment();
+      }, false);
+
+      video.src = URL.createObjectURL(ms);
+      //video.mozSrcObject = ms;
+    </script>
+  </body>
+</html>
