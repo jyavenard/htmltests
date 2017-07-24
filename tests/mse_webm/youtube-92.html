@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+  <title>MSE: Adding multiple opus init segment</title>
+  <script type="text/javascript" src="../common.js"></script>
+  <script type="text/javascript" src="../mediasource.js"></script>
+</head>
+<body>
+<p><pre id="log"></pre></p>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+runWithMSE(function(ms, el) {
+  el.controls = true;
+  once(ms, 'sourceopen').then(function() {
+    ok(true, "Receive a sourceopen event");
+    var src = ms.addSourceBuffer("audio/webm; codecs=opus");
+    var init;
+    var media;
+
+    function getEventAppend(cb, endCb) {
+      var chainCount = 0;
+      return function() {
+        if (chainCount < 2) {
+          ++chainCount;
+          cb();
+        } else {
+          endCb();
+        }
+      };
+    }
+
+    fetchWithXHR("../../mediatest/webm/youtube-92/append-00000.bin",
+                 (response) => {
+      init = new Uint8Array(response);
+      fetchWithXHR("../../mediatest/webm/youtube-92/append-00010.bin",
+                 (response) => {
+        media = new Uint8Array(response);
+
+        var firstAppend = getEventAppend(function() {
+            info("append init");
+            src.appendBuffer(init);
+        }, function() {
+          src.removeEventListener('update', firstAppend);
+          src.addEventListener('update', function abortAppend() {
+            src.removeEventListener('update', abortAppend);
+            info("src.abort()");
+            src.abort();
+            var end = src.buffered.end(0);
+
+            var secondAppend = getEventAppend(function() {
+              info("second append init");
+              src.appendBuffer(init);
+            }, function() {
+              is(src.buffered.end(0), end, 'Range end');
+              info("succeeded");
+            });
+            src.addEventListener('update', secondAppend);
+            secondAppend();
+          });
+          info("append media");
+          src.appendBuffer(media);
+        });
+        src.addEventListener('update', firstAppend);
+        firstAppend();
+      });
+    });
+  });
+});
+</script>
+</pre>
+</body>
+</html>

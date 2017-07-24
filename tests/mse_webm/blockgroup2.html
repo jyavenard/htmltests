@@ -1,0 +1,96 @@
+<html>
+  <head>
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+<script>
+    function Logger(id) {
+        this.el = document.getElementById('log');
+    }
+    var log_start = Date.now();
+    Logger.prototype.log = function(msg) {
+        var fragment = document.createDocumentFragment();
+        fragment.appendChild(document.createTextNode((Date.now() - log_start) + ': ' + msg));
+        fragment.appendChild(document.createElement('br'));
+        this.el.appendChild(fragment);
+    };
+
+    Logger.prototype.clear = function() {
+        this.el.textContent = '';
+    };
+</script>
+    <script type="text/javascript">
+      var video;
+      function play()
+      {
+        var webmSupported =  MediaSource.isTypeSupported("video/webm; codecs=\"vorbis, vp8\"");
+        console.log("webm supported: " + webmSupported);
+        var conentType = "video/webm; codecs=\"vp9\"";
+        var url = '../../mediatest/webm/a-eng-0128k-libvorbis.webm';
+        if (MediaSource.isTypeSupported(conentType)) {
+          var mediaSource = new MediaSource();
+          video.src = URL.createObjectURL(mediaSource);
+          mediaSource.addEventListener('sourceopen', function()
+          {
+            var sourceBuffer = mediaSource.addSourceBuffer(conentType);
+            sourceBuffer.addEventListener('error', function() {
+              console.log('error:' + sourceBuffer.error);
+            });
+            var xhr = new XMLHttpRequest;
+            xhr.open('get',  url);
+            xhr.responseType = 'arraybuffer';
+            xhr.onload = function () 
+            {
+              sourceBuffer.addEventListener('updateend', function () {
+                if (mediaSource.readyState == 'open')
+                {
+                  console.log("signalling end of stream");
+                  mediaSource.endOfStream();
+                }
+              });
+              console.log("Loaded a chunk of " + xhr.response.byteLength + " bytes");
+              var chunk = new Uint8Array(xhr.response);
+              sourceBuffer.appendBuffer(chunk);
+            };
+            xhr.send();
+          });
+        }
+      }
+      $(function()
+      {
+        var logger = new Logger('log');
+        logger.log('Log: (times in ms)');
+        video = document.getElementById("video");
+        video.addEventListener('loadedmetadata', function() {
+          logger.log('loadedmetadata');
+          logger.log("video is " + video.duration + " seconds long");
+        });
+        video.addEventListener('paused', function() {
+          logger.log('paused');
+        });
+        video.addEventListener('seeking', function() {
+          logger.log('seeking');
+        });
+        video.addEventListener('loadeddata', function() {
+          logger.log('loadeddata');
+        });
+        video.addEventListener('canplay', function() {
+          logger.log('canplay');
+          logger.log("video is " + video.duration + " seconds long");
+          logger.log("buffered ranges: " + video.buffered.length);
+          for (var bufferedRange = 0; bufferedRange < video.buffered.length; ++bufferedRange)
+          {
+            logger.log(bufferedRange + ": from " + video.buffered.start(bufferedRange) + " to " + video.buffered.end(bufferedRange));
+          }
+          video.play();
+        });
+        video.addEventListener('timeupdate', function() {
+          logger.log("playback time is " + video.currentTime);
+        });
+        play();
+      });
+    </script>
+  </head>
+  <body>
+    <video controls id="video"></video>
+    <p><pre id="log"></pre></p>
+  </body>
+</html>

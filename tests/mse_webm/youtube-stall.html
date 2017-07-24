@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>MediaSource API Demo</title>
+</head>
+<body>
+
+<h3>Appending .mp4 video chunks using the Media Source API</h3>
+
+<section>
+    <video controls width="320" height="240"></video>
+    <p>permalink: <a id="permalink" href=""></a></p>
+    <p><pre id="log"></pre></p>
+</section>
+
+<script src="common.js"></script>
+
+<script>
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+
+var params = parseSearch(window.location.search);
+
+var fragments = [
+'../../mediatest/webm/segment-164a1ea00-00026.bin',
+'../../mediatest/webm/segment-164a1ea00-00027.bin',
+'../../mediatest/webm/segment-164a1ea00-00028.bin',
+'../../mediatest/webm/segment-164a1ea00-00029.bin',
+'../../mediatest/webm/segment-164a1ea00-00030.bin',
+'../../mediatest/webm/segment-164a1ea00-00031.bin',
+'../../mediatest/webm/segment-164a1ea00-00032.bin',
+'../../mediatest/webm/segment-164a1ea00-00033.bin',
+'../../mediatest/webm/segment-164a1ea00-00034.bin',
+'../../mediatest/webm/segment-164a1ea00-00035.bin',
+'../../mediatest/webm/segment-164a1ea00-00036.bin',
+'../../mediatest/webm/segment-164a1ea00-00037.bin',
+'../../mediatest/webm/segment-164a1ea00-00038.bin',
+'../../mediatest/webm/segment-164a1ea00-00039.bin',
+ ];
+
+var gotLoadedData = false;
+
+var FILES = params['files'] || fragments;
+logger.log('files=' + FILES);
+
+var MIME = params['mime'] || 'audio/webm';
+logger.log('mime=' + MIME);
+var CODECS = params['codecs'] || 'opus';
+logger.log('codecs=' + CODECS);
+var DURATION = params['duration'] || -1;
+var EOS = params['eos'] || 0;
+var EOSAT = params['eosat'] || -1;
+var INIT = params['init'] || 0;
+var permalink = document.getElementById('permalink');
+permalink.href =
+        window.location.protocol
+        + '//' + window.location.host
+        + window.location.pathname
+        + '?eos=' + encodeURIComponent(EOS)
+        + '&eosat=' + encodeURIComponent(EOSAT)
+        + '&duration=' + encodeURIComponent(DURATION)
+        + '&init=' + encodeURIComponent(INIT)
+;
+permalink.textContent = permalink.href;
+
+var video = document.querySelector('video');
+video.addEventListener('loadstart', function(e){ logger.log('* video.loadstart'); });
+video.addEventListener('progress', function(e){ logger.log('* video.progress'); });
+video.addEventListener('suspend', function(e){ logger.log('* video.suspend'); });
+video.addEventListener('abort', function(e){ logger.log('* video.abort'); });
+video.addEventListener('error', function(e){ logger.log('* video.error'); });
+video.addEventListener('emptied', function(e){ logger.log('* video.emptied'); });
+video.addEventListener('stalled', function(e){ logger.log('* video.stalled'); });
+video.addEventListener('loadedmetadata', function(e){ logger.log('video.loadedmetadata'); logger.log('video.height=' + video.videoHeight); logger.log('video.width=' + video.videoWidth); logger.log('video.duration=' + video.duration); logger.log('mediasource.duration = ' + mediaSource.duration); });
+video.addEventListener('canplay', function(e){ logger.log('* video.canplay'); });
+video.addEventListener('canplaythrough', function(e){ logger.log('* video.canplaythrough'); });
+video.addEventListener('playing', function(e){ logger.log('* video.playing'); });
+video.addEventListener('waiting', function(e){ logger.log('* video.waiting. video.currentTime=' + video.currentTime); });
+video.addEventListener('seeking', function(e){ logger.log('* video.seeking'); });
+video.addEventListener('timeupdate', function(e){ logger.log('* video.timeupdate'); });
+video.addEventListener('seeked', function(e){ logger.log('* video.seeked'); });
+video.addEventListener('ended', function(e){ logger.log('* video.ended'); });
+video.addEventListener('durationchange', function(e){ logger.log('* video.durationchange'); logger.log('video.duration=' + video.duration); logger.log('mediasource.duration = ' + mediaSource.duration); });
+//video.addEventListener('timeupdate', function(e){ logger.log('* video.timeupdate '); });
+video.addEventListener('play', function(e){ logger.log('* video.play'); });
+video.addEventListener('pause', function(e){ logger.log('* video.pause'); });
+video.addEventListener('ratechange', function(e){ logger.log('* video.ratechange'); });
+video.addEventListener('resize', function(e){ logger.log('* video.resize'); });
+video.addEventListener('volumechange', function(e){ logger.log('* video.volumechange'); });
+
+video.addEventListener('loadeddata', function(e){
+    logger.log('* video.loadeddata');
+    gotLoadedData = true;
+});
+
+if (!!!window.MediaSource) {
+    logger.log('MediaSource API is not available');
+}
+
+var mediaSource = new MediaSource();
+
+mediaSource.addEventListener('sourceopen', function(e) {
+    logger.log('* mediaSource.sourceopen - mediaSource readyState: ' + this.readyState);
+});
+
+video.src = window.URL.createObjectURL(mediaSource);
+
+
+var files = {};
+mediaSource.addEventListener('sourceopen', function(e) {
+    mediaSource.removeEventListener('sourceopen', arguments.callee);
+mediaSource.addEventListener('sourceopen', function(e) {
+    logger.log('* mediaSource.sourceopen - mediaSource readyState: ' + this.readyState);
+    logger.log('* sourceBuffer.updating = ' + sourceBuffer.updating);
+});
+mediaSource.addEventListener('sourceended', function(e) {
+    logger.log('* mediaSource.sourceended - mediaSource readyState: ' + this.readyState);
+    logger.log('* sourceBuffer.updating = ' + sourceBuffer.updating);
+    logger.log('video.buffered =' + printTimeRange(video.buffered));
+    logger.log('sb.buffered =' + printTimeRange(sourceBuffer.buffered));
+});
+mediaSource.addEventListener('sourceclose', function(e) {
+     logger.log('* mediaSource.sourceclose');
+});
+
+
+    logger.log('mediaSource.addSourceBuffer(\'' + MIME + (CODECS ? ("; codecs=" + CODECS) : "") + ')');
+    try {
+        var sourceBuffer = mediaSource.addSourceBuffer(MIME + (CODECS ? ("; codecs=" + CODECS) : ""));
+    } catch (e) {
+        logger.log('addSourceBuffer exception: ' + e);
+        throw e;
+    }
+    sourceBuffer.addEventListener('updatestart', function(e){ logger.log('* sourceBuffer.updatestart'); });
+    sourceBuffer.addEventListener('update', function(e){ logger.log('* sourceBuffer.update'); });
+    sourceBuffer.addEventListener('updateend', function(e){ logger.log('* sourceBuffer.updateend'); logger.log('sourceBuffer.buffered.length = ' + this.buffered.length); if (this.buffered.length) { var dur = this.buffered.end(0) - this.buffered.start(0); logger.log('sourceBuffer.buffered.start(0) = ' + sourceBuffer.buffered.start(0)); logger.log('sourceBuffer.duration = ' + dur.toString()); } else { logger.log('sourceBuffer.duration = 0'); } logger.log('video.duration=' + video.duration); logger.log('mediasource.duration = ' + mediaSource.duration); logger.log('video.buffered =' + printTimeRange(video.buffered));
+});
+    sourceBuffer.addEventListener('error', function(e){ logger.log('* sourceBuffer.error'); });
+    sourceBuffer.addEventListener('abort', function(e){ logger.log('* sourceBuffer.abort'); });
+
+    logger.log('mediaSource readyState: ' + this.readyState);
+
+    GETALL(FILES, function(urls, files) {
+        function play(fi) {
+            if (fi < urls.length) {
+                var url = urls[fi];
+                var file = files[url];
+                logger.log('sourceBuffer.appendBuffer([' + fi + ']' + url + ', length ' + file.length + '):');
+                try {
+                    sourceBuffer.appendBuffer(file);
+                } catch (e) {
+                    logger.log('sourceBuffer.appendBuffer([' + fi + ']' + url + ', length ' + file.length + ') exception: ' + e);
+                    throw e;
+                }
+                if (fi == 0 && DURATION >=0) {
+                sourceBuffer.addEventListener('updateend', function(e) {
+                    logger.log('Set initial duration to ' + DURATION);
+                    sourceBuffer.removeEventListener('updateend', arguments.callee);
+                    mediaSource.duration = DURATION;
+                video.addEventListener('durationchange', function(e) {
+                    logger.log('* video.durationchange for sourceBuffer.appendBuffer([' + fi + ']' + url + ', length ' + file.length + ')');
+                    video.removeEventListener('durationchange', arguments.callee);
+                    if (0 == INIT) {
+                      play(fi + 1);
+                    }
+                });
+                });
+                } else {
+                  if (INIT > 0) { return; }
+                  if (fi == EOSAT) {
+                    sourceBuffer.addEventListener('updateend', function(e) {
+                      logger.log('* sourceBuffer.updateend for sourceBuffer.appendBuffer([' + fi + ']' + url + ', length ' + file.length + ')');
+                      sourceBuffer.removeEventListener('updateend', arguments.callee);
+                    mediaSource.addEventListener('sourceended', function(e) {
+                      mediaSource.removeEventListener('sourceended', arguments.callee);
+                      play(fi + 1);
+                    });
+                    logger.log('mediaSource.endOfStream()');
+                    try {
+                        mediaSource.endOfStream();
+                    } catch (e) {
+                        logger.log('endOfStream exception: ' + e);
+                        throw e;
+                    }
+                  });
+                  } else {
+                    sourceBuffer.addEventListener('updateend', function(e) {
+                      logger.log('* sourceBuffer.updateend for sourceBuffer.appendBuffer([' + fi + ']' + url + ', length ' + file.length + ')');
+                      sourceBuffer.removeEventListener('updateend', arguments.callee);
+                      if (sourceBuffer.buffered.length > 0 && gotLoadedData) {
+                        video.currentTime = sourceBuffer.buffered.end(sourceBuffer.buffered.length-1) - 5;
+                      }
+                      play(fi + 1);
+    if (fi == 1) video.play();
+    });
+                  }
+                }
+            } else {
+                if (0 != EOS) {
+                  logger.log('mediaSource.endOfStream()');
+                  try {
+                      mediaSource.endOfStream();
+                  } catch (e) {
+                      logger.log('endOfStream exception: ' + e);
+                      throw e;
+                  }
+                }
+            }
+        };
+        play(0);
+    });
+}, false);
+
+// Download file at url, call callback(file).
+function GET(url, callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.send();
+
+    xhr.onload = function(e) {
+        if (xhr.status != 200) {
+            logger.log("Unexpected status code " + xhr.status + " for " + url);
+            return false;
+        } else {
+            logger.log('URL ' + url + ' loaded.');
+        }
+        callback(new Uint8Array(xhr.response));
+    };
+};
+
+// Download all files in urls, at the end call callback(urls, {url:file, ...})
+function GETALL(urls, callback) {
+    var to_download = urls.length;
+    var files = {};
+    for (var i in urls) {
+        (function(i) {
+            var url = urls[i];
+            if (files[url] === undefined) {
+                files[url] = null;
+                logger.log('Will download: [' + i + ']' + url);
+                GET(urls[i], function (f) {
+                    logger.log('Downloaded: [' + i + ']' + url + ' size=' + f.length);
+                    files[url] = f;
+                    if (--to_download === 0) {
+                        logger.log('All downloads finished');
+                        callback(urls, files);
+                    }
+                });
+            } else {
+                logger.log('Will not download again: [' + i + ']' + url);
+                if (--to_download === 0) {
+                    logger.log('All downloads finished');
+                    callback(urls, files);
+                }
+            }
+        } (i));
+    }
+};
+</script>
+</body>
+</html>
