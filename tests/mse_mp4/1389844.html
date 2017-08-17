@@ -37,7 +37,7 @@ runWithMSE(function(ms, el) {
     el.addEventListener("playing", ForbiddenEvents);
 
     ok(true, "Receive a sourceopen event");
-    var videosb = ms.addSourceBuffer("video/mp4");
+    var videosb = ms.addSourceBuffer("video/mp4; codecs=avc1.64000d");
     el.addEventListener("error", function(e) {
       ok(false, "should not fire '" + e + "' event");
     });
