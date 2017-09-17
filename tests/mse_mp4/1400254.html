@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript">
+
+        </script>
+        <title>Media Source Extension Test</title>
+    </head>
+    <body>
+        <h3>Media Source Extension Test</h3>
+        <hr />
+        <video id="mainPlayer" width="640" height="360"
+            controls="controls" preload="metadata">
+        </video>
+        <div id="curTime">
+        </div>
+        <div id="bufferState">
+        </div>
+    </body>
+    <script type="text/javascript">
+        var mediaSource = new window.MediaSource();
+        var videoElement = document.getElementById('mainPlayer');
+
+        var url = URL.createObjectURL(mediaSource);
+        videoElement.src = url;
+        var sourceBuffer = null;
+
+        function requestData(offset, start, end) {
+            return new Promise(function (resolve, reject) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', "splice.mp4");
+                //xhr.open('GET', "samples/external_source/noaudio_dashinit.mp4");
+
+                xhr.responseType = 'arraybuffer';
+                xhr.addEventListener("readystatechange", function () {
+                    if (xhr.readyState == xhr.DONE) { // wait for video to load
+                        // Add response to buffer
+                        sourceBuffer.timestampOffset = offset;
+                        sourceBuffer.appendWindowStart = 0; // prevent exception (end <= start)
+                        sourceBuffer.appendWindowEnd = end;
+                        sourceBuffer.appendWindowStart = start;
+
+                        var updateEndHandler = function () {
+                            this.removeEventListener("updateend", updateEndHandler, false);
+                            resolve();
+                        };
+
+                        sourceBuffer.addEventListener('updateend', updateEndHandler, false);
+                        sourceBuffer.appendBuffer(new Uint8Array(xhr.response));
+                    }
+                }, false);
+
+                xhr.send();
+            });
+        }
+
+        // Wait for event that tells us that our media source object is
+        //   ready for a buffer to be added.
+        mediaSource.addEventListener('sourceopen', function(e) {
+            sourceBuffer = mediaSource.addSourceBuffer('audio/mp4;codecs="mp4a.40.2"');
+            //requestData(-293.72, 0, 5.36)
+            requestData(-293.72, 0,5.378667).then(function () {
+                return requestData(-288.36, 5.36, 10.72);
+            }).then(function () {
+                mediaSource.endOfStream();
+            });
+
+        }, false);
+
+        var requestId = window.requestAnimationFrame(render);
+
+        function render() {
+            var vTime = document.getElementById("curTime");
+            // Display current video position
+            vTime.textContent = formatTime(mainPlayer.currentTime) + "/" + formatTime(mainPlayer.duration);
+
+            var bufferState = document.getElementById("bufferState");
+            bufferState.textContent = "Buffer: ";
+            if (sourceBuffer != null) {
+                for (var i = 0; i < sourceBuffer.buffered.length; i++) {
+                    bufferState.textContent += "(" + sourceBuffer.buffered.start(i) + "-" + sourceBuffer.buffered.end(i) + ") ";
+                }
+            }
+
+            // Recall this function when available
+            requestId = window.requestAnimationFrame(render);
+        }
+
+        //  Converts time in seconds into a string HH:MM:SS.ss
+        function formatTime(timeSec) {
+            var seconds = timeSec % 60;                                 // Get seconds portion
+            var minutes = ((timeSec - seconds) / 60) % 60;              // Get minutes portion
+            var hours = ((timeSec - seconds - (minutes * 60))) / 3600;  // Get hours portion
+            seconds = seconds.toFixed(2);   // Restrict to 2 places (hundredths of seconds)
+            var dispSeconds = seconds.toString().split(".");
+            return (pZ(hours, 2) + ":" + pZ(minutes, 2) + ":" + pZ(dispSeconds[0], 2) + "." + pZ(dispSeconds[1], 2));
+        }
+
+        //  Pad digits with zeros if needed
+        function pZ(value, padCount) {
+            var tNum = value + '';
+            while (tNum.length < padCount) {
+                tNum = "0" + tNum;
+            }
+            return tNum;
+        }
+    </script>
+</html>
