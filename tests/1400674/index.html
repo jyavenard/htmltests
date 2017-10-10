@@ -1,0 +1,151 @@
+<html>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<head>
+  <script type="text/javascript" src="../mediasource.js"></script>
+  <script type="text/javascript" src="../common.js"></script>
+</head>
+
+<body>
+  <div>
+    <p>permalink: <a id="permalink" href=""></a></p>
+    <fieldset>
+      <legend>Choose container type</legend>
+        <input id="_webm" type="radio" name="container" value="webm" onclick="onClickWebM()" />WebM
+        <input id="_mp4" type="radio" name="container" value="mp4" onclick="onClickMP4()"" />MP4
+    </fieldset>
+    <p>mime type: <pre id="mime">video/webm; codecs="vorbis,vp8"</pre></p>
+    <video autoplay="true" width="640" height="480" controls></video>
+    <p/>
+    <pre id="log"></pre>
+  </div>
+  <script>
+    function onClickWebM() {
+      window.location.href = "?file=1400674.webm";
+    }
+    function onClickMP4() {
+      window.location.href = "?file=1400674.mp4";
+    }
+  </script>
+  <script>
+    var FILE_DEFAULT = "1400674.webm";
+    var C_MIN_BUFFER_TIME = 0.5;
+
+    var gVideo = null;
+    var gMediaSource = null;
+    var gDataStart = 0;
+    var gSourceBuffer = null;
+    var gCanUpdate = true;
+    var gDataBuffer = null;
+    var logger = new Logger('log');
+
+    var params = parseSearch(window.location.search);
+    var FILE = params['file'] || FILE_DEFAULT;
+    var EXTENSION = FILE.split('.').pop();
+    var MIME = 'video/webm; codecs="vorbis,vp8"';
+    if (EXTENSION == 'mp4') {
+      MIME = 'video/mp4; codecs="mp4a.40.2,avc1.4d4015"';
+      document.getElementById('_mp4').checked = true;
+    } else {
+      document.getElementById('_webm').checked = true;
+    }
+
+    var permalink = document.getElementById('permalink');
+    permalink.href =
+        window.location.protocol
+        + '//' + window.location.host
+        + window.location.pathname
+        + '?file=' + encodeURIComponent(FILE)
+    ;
+    permalink.textContent = permalink.href;
+    var mimeType = document.getElementById('mime');
+    mimeType.textContent = MIME;
+
+    function AddData() {
+      gCanUpdate = false;
+
+      var buffersize = 20000;
+      var end = gDataStart + buffersize;
+
+      var lTmpBuff = gDataBuffer.slice(gDataStart, end);
+      //console.log(lTmpBuff.byteLength + ', ' + gDataStart);
+
+      if (lTmpBuff.byteLength > 0) {
+        gSourceBuffer.appendBuffer(lTmpBuff);
+        info("adding " + gDataStart + '-' + end + ' out of ' + gDataBuffer.byteLength);
+      } else {
+        gSourceBuffer.removeEventListener("updateend", onUpdateEnd);
+        gMediaSource.endOfStream();
+        info("reached EOS");
+      }
+      gDataStart = gDataStart + buffersize;
+    }
+
+    function onUpdateEnd() {
+      gCanUpdate = true;
+      info("updateend buffered=" + printTimeRange(gSourceBuffer.buffered));
+    }
+
+    function CheckBuffer() {
+      var lTimeDiff = 0;
+
+      if (gSourceBuffer !== null) {
+        if (gSourceBuffer.buffered.length > 0) {
+          lTimeDiff = gSourceBuffer.buffered.end(gSourceBuffer.buffered.length - 1) - gVideo.currentTime;
+        }
+        if (lTimeDiff < C_MIN_BUFFER_TIME) {
+          if (gCanUpdate)
+            AddData();
+        }
+
+        console.log('buffer difference: ' + lTimeDiff);
+      }
+    }
+
+    function onSourceOpen(e) {
+      fetchWithXHR(FILE).then(function (buffer) {
+        gDataBuffer = buffer;
+        startLoading();
+      });
+    }
+
+    function onAddSourceBuffer(e) {
+      info("addsourcebuffer event received");
+      setInterval(function () {
+        CheckBuffer();
+      }, 100);
+
+      AddData();
+      gVideo.play();
+    }
+
+    function startLoading() {
+      gSourceBuffer = gMediaSource.addSourceBuffer(MIME);
+      gSourceBuffer.addEventListener("updateend", onUpdateEnd);
+      gMediaSource.sourceBuffers.addEventListener("addsourcebuffer", onAddSourceBuffer);
+    }
+
+    function onOpenFile(event) {
+      var input = event.target;
+
+      gDataStart = 0;
+      gCanUpdate = true;
+
+      var reader = new FileReader();
+      reader.onload = function () {
+        gDataBuffer = reader.result;
+
+        console.log(gDataBuffer.byteLength);
+
+      };
+      reader.readAsArrayBuffer(input.files[0]);
+    }
+
+    gMediaSource = new MediaSource();
+    gMediaSource.addEventListener('sourceopen', onSourceOpen, false);
+
+    gVideo = document.querySelector('video');
+    gVideo.src = window.URL.createObjectURL(gMediaSource);
+  </script>
+</body>
+
+</html>
