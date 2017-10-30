@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>HTML5 flac player Demo</title>
+</head>
+<body>
+
+<h3>Playing an ogg with a flac track</h3>
+
+<section>
+    <video controls width="320" height="240"></video>
+    <p><pre id="log"></pre></p>
+</section>
+
+<script src="../mse_mp4/common.js"></script>
+
+<script>
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+
+    var video = document.querySelector('video');
+    video.addEventListener('loadstart', function(e){ logger.log('* video.loadstart'); });
+    video.addEventListener('progress', function(e){ logger.log('* video.progress'); });
+    video.addEventListener('suspend', function(e){ logger.log('* video.suspend'); });
+    video.addEventListener('abort', function(e){ logger.log('* video.abort'); });
+    video.addEventListener('error', function(e){ logger.log('* video.error'); });
+    video.addEventListener('emptied', function(e){ logger.log('* video.emptied'); });
+    video.addEventListener('stalled', function(e){ logger.log('* video.stalled'); });
+    video.addEventListener('loadedmetadata', function(e){
+        logger.log('video.loadedmetadata'); 
+        logger.log('video.height=' + video.videoHeight);
+        logger.log('video.width=' + video.videoWidth); 
+        logger.log('video.duration=' + video.duration); 
+    });
+    video.addEventListener('canplay', function(e){ logger.log('* video.canplay'); });
+    video.addEventListener('canplaythrough', function(e){ logger.log('* video.canplaythrough'); });
+    video.addEventListener('playing', function(e){ logger.log('* video.playing'); });
+    video.addEventListener('waiting', function(e){ logger.log('* video.waiting'); });
+    video.addEventListener('seeking', function(e){ logger.log('* video.seeking'); });
+    video.addEventListener('timeupdate', function(e){ logger.log('* video.timeupdate'); });
+    video.addEventListener('seeked', function(e){ logger.log('* video.seeked'); });
+    video.addEventListener('ended', function(e){ logger.log('* video.ended'); });
+    video.addEventListener('durationchange', function(e){ 
+        logger.log('* video.durationchange'); 
+        logger.log('video.duration=' + video.duration); 
+    });
+    //video.addEventListener('timeupdate', function(e){ logger.log('* video.timeupdate '); });
+    video.addEventListener('play', function(e){ logger.log('* video.play'); });
+    video.addEventListener('pause', function(e){ logger.log('* video.pause'); });
+    video.addEventListener('ratechange', function(e){ logger.log('* video.ratechange'); });
+    video.addEventListener('resize', function(e){ logger.log('* video.resize'); });
+    video.addEventListener('volumechange', function(e){ logger.log('* video.volumechange'); });
+    
+    video.addEventListener('loadeddata', function(e){ 
+        logger.log('* video.loadeddata');
+        //video.currentTime = 152; //161.889523;
+        video.play();
+    });
+
+    video.src = "A4.ogv";
+
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>HTML5 flac player Demo</title>
+</head>
+<body>
+
+<h3>Playing a flac 16 bits 44.1kHz</h3>
+
+<section>
+    <audio controls />
+    <p><pre id="log"></pre></p>
+</section>
+
+<script src="../mse_mp4/common.js"></script>
+
+<script>
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+
+    var audio = document.querySelector('audio');
+    audio.addEventListener('loadstart', function(e){ logger.log('* audio.loadstart'); });
+    audio.addEventListener('progress', function(e){ logger.log('* audio.progress'); });
+    audio.addEventListener('suspend', function(e){ logger.log('* audio.suspend'); });
+    audio.addEventListener('abort', function(e){ logger.log('* audio.abort'); });
+    audio.addEventListener('error', function(e){ logger.log('* audio.error'); });
+    audio.addEventListener('emptied', function(e){ logger.log('* audio.emptied'); });
+    audio.addEventListener('stalled', function(e){ logger.log('* audio.stalled'); });
+    audio.addEventListener('loadedmetadata', function(e){
+        logger.log('audio.loadedmetadata'); 
+        logger.log('audio.duration=' + audio.duration); 
+    });
+    audio.addEventListener('canplay', function(e){ logger.log('* audio.canplay'); });
+    audio.addEventListener('canplaythrough', function(e){ logger.log('* audio.canplaythrough'); });
+    audio.addEventListener('playing', function(e){ logger.log('* audio.playing'); });
+    audio.addEventListener('waiting', function(e){ logger.log('* audio.waiting'); });
+    audio.addEventListener('seeking', function(e){ logger.log('* audio.seeking'); });
+    audio.addEventListener('timeupdate', function(e){ logger.log('* audio.timeupdate'); });
+    audio.addEventListener('seeked', function(e){ logger.log('* audio.seeked'); });
+    audio.addEventListener('ended', function(e){ logger.log('* audio.ended'); });
+    audio.addEventListener('durationchange', function(e){ 
+        logger.log('* audio.durationchange'); 
+        logger.log('audio.duration=' + audio.duration); 
+    });
+    //audio.addEventListener('timeupdate', function(e){ logger.log('* audio.timeupdate '); });
+    audio.addEventListener('play', function(e){ logger.log('* audio.play'); });
+    audio.addEventListener('pause', function(e){ logger.log('* audio.pause'); });
+    audio.addEventListener('ratechange', function(e){ logger.log('* audio.ratechange'); });
+    audio.addEventListener('resize', function(e){ logger.log('* audio.resize'); });
+    audio.addEventListener('volumechange', function(e){ logger.log('* audio.volumechange'); });
+    
+    audio.addEventListener('loadeddata', function(e){ 
+        logger.log('* audio.loadeddata');
+        audio.play();
+    });
+
+    audio.src = "BIS1447-002-flac_16.flac";
+
+</script>
+</body>
+</html>
