@@ -96,6 +96,7 @@ Author: Eric Bidelman (ebidel@)
 -->
 </head>
 <body>
+<script src="common.js"></script>
 
 <h3>Appending .webm video chunks using the Media Source API</h3>
 
@@ -298,7 +299,9 @@ Author: Eric Bidelman (ebidel@)
                             video.play(); // Start playing after 1st chunk is appended.
                         }
                         if (DELAY_CHUNK == 0) {
-                            readChunk_(++i);
+                            once(sourceBuffer, "updateend").then(function() {
+                              readChunk_(++i);
+                            });
                         } else {
                             window.setTimeout(readChunk_, DELAY_CHUNK, ++i);
                         }
