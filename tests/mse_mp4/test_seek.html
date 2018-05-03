@@ -49,7 +49,7 @@ runWithMSE(function(ms, el) {
 
     var sb = ms.addSourceBuffer("video/mp4; codecs=\"avc1.64000d,mp4a.40.2\"");
     var promises = [];
-    promises.push(fetchAn
+    promises.push(fetchAndLoad(sb, 'facebook-paper-', ['init'], '.mp4'));
     promises.push(once(el, 'loadedmetadata'))
     Promise.all(promises)
     .then(function() {
