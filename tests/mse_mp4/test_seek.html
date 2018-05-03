@@ -23,35 +23,37 @@ runWithMSE(function(ms, el) {
   el.controls = true;
   once(ms, 'sourceopen').then(function() {
     logger.log("Receive a sourceopen event");
-
-		el.addEventListener('loadstart', function(e){ logger.log('* el.loadstart'); });
-		el.addEventListener('progress', function(e){ logger.log('* el.progress'); });
-		el.addEventListener('suspend', function(e){ logger.log('* el.suspend'); });
-		el.addEventListener('abort', function(e){ logger.log('* el.abort'); });
-		el.addEventListener('error', function(e){ logger.log('* el.error'); });
-		el.addEventListener('emptied', function(e){ logger.log('* el.emptied'); });
-		el.addEventListener('stalled', function(e){ logger.log('* el.stalled'); });
-		el.addEventListener('loadedmetadata', function(e){ logger.log('el.loadedmetadata'); logger.log('el.height=' + el.videoHeight); logger.log('el.width=' + el.videoWidth); logger.log('el.duration=' + el.duration); });
-		el.addEventListener('canplay', function(e){ logger.log('* el.canplay'); });
-		el.addEventListener('canplaythrough', function(e){ logger.log('* el.canplaythrough'); });
-		el.addEventListener('playing', function(e){ logger.log('* el.playing'); });
-		el.addEventListener('waiting', function(e){ logger.log('* el.waiting'); });
-		el.addEventListener('seeking', function(e){ logger.log('* el.seeking'); });
-		el.addEventListener('seeked', function(e){ logger.log('* el.seeked'); });
-		el.addEventListener('ended', function(e){ logger.log('* el.ended'); });
-		el.addEventListener('durationchange', function(e){ logger.log('* el.durationchange'); logger.log('el.duration=' + el.duration); });
-		//el.addEventListener('timeupdate', function(e){ logger.log('* el.timeupdate '); });
-		el.addEventListener('play', function(e){ logger.log('* el.play'); });
-		el.addEventListener('pause', function(e){ logger.log('* el.pause'); });
-		el.addEventListener('ratechange', function(e){ logger.log('* el.ratechange'); });
-		el.addEventListener('resize', function(e){ logger.log('* el.resize'); });
-		el.addEventListener('volumechange', function(e){ logger.log('* el.volumechange'); });
-		el.addEventListener('loadeddata', function(e){ logger.log('* el.loadeddata'); });
+    el.addEventListener('loadstart', function(e){ logger.log('* el.loadstart'); });
+    el.addEventListener('progress', function(e){ logger.log('* el.progress'); });
+    el.addEventListener('suspend', function(e){ logger.log('* el.suspend'); });
+    el.addEventListener('abort', function(e){ logger.log('* el.abort'); });
+    el.addEventListener('error', function(e){ logger.log('* el.error'); });
+    el.addEventListener('emptied', function(e){ logger.log('* el.emptied'); });
+    el.addEventListener('stalled', function(e){ logger.log('* el.stalled'); });
+    el.addEventListener('loadedmetadata', function(e){ logger.log('el.loadedmetadata'); logger.log('el.height=' + el.videoHeight); logger.log('el.width=' + el.videoWidth); logger.log('el.duration=' + el.duration); });
+    el.addEventListener('canplay', function(e){ logger.log('* el.canplay'); });
+    el.addEventListener('canplaythrough', function(e){ logger.log('* el.canplaythrough'); });
+    el.addEventListener('playing', function(e){ logger.log('* el.playing'); });
+    el.addEventListener('waiting', function(e){ logger.log('* el.waiting'); });
+    el.addEventListener('seeking', function(e){ logger.log('* el.seeking'); });
+    el.addEventListener('seeked', function(e){ logger.log('* el.seeked'); });
+    el.addEventListener('ended', function(e){ logger.log('* el.ended'); });
+    el.addEventListener('durationchange', function(e){ logger.log('* el.durationchange'); logger.log('el.duration=' + el.duration); });
+    //el.addEventListener('timeupdate', function(e){ logger.log('* el.timeupdate '); });
+    el.addEventListener('play', function(e){ logger.log('* el.play'); });
+    el.addEventListener('pause', function(e){ logger.log('* el.pause'); });
+    el.addEventListener('ratechange', function(e){ logger.log('* el.ratechange'); });
+    el.addEventListener('resize', function(e){ logger.log('* el.resize'); });
+    el.addEventListener('volumechange', function(e){ logger.log('* el.volumechange'); });
+    el.addEventListener('loadeddata', function(e){ logger.log('* el.loadeddata'); });
 
     var sb = ms.addSourceBuffer("video/mp4; codecs=\"avc1.64000d,mp4a.40.2\"");
-    fetchAndLoad(sb, 'facebook-paper-', ['init'], '.mp4')
-    .then(once.bind(null, el, 'loadedmetadata'))
+    var promises = [];
+    promises.push(fetchAn
+    promises.push(once(el, 'loadedmetadata'))
+    Promise.all(promises)
     .then(function() {
+      logger.log("got loadedmetadata");
       var p = once(el, 'seeking');
       ms.duration = 10;
       el.play();
