@@ -1,0 +1,53 @@
+<html>
+<head>
+<title>Firefox arraybuffer->blob->createObjectURL canplaythrough event test</title>
+</head>
+<body>
+
+<script>
+// test case: OGG audio file is loaded as binary (arraybuffer or Uint8Array) and
+// subsequently turned into a blob, then into an url using URL.createObjectURL.
+// canplaythrough will never fire (tested on 59.0.2 64-bit) and readyState will always
+// be 3 and not become 4 as expected. playing the audio works though.
+//
+// changing the request's responseType to "blob" and using URL.createObjectURL on that
+// will trigger canplaythrough and readyState will be 4.
+
+var aud = document.createElement('audio');
+
+function getBlob(callback) {
+  var req = new XMLHttpRequest();
+  req.addEventListener("load", function() {
+    callback(req.response);
+  });
+  req.open("GET", "test.ogg", true);
+  req.responseType = "blob";
+  req.send();
+}
+
+getBlob(function(arr) {
+  var blob = new Blob([arr], {type:"audio/ogg"});
+  var blobUrl = URL.createObjectURL(blob);
+  
+  const events = [ "suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                   "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                   "waiting", "pause", "durationchange", "seeking", "seeked" ];
+  function logEvent(e) {
+    console.log("got " + e.type + " event");
+  }
+  events.forEach(function(e) {
+    aud.addEventListener(e, logEvent);
+  });
+
+  aud.preload = "auto"
+  aud.src = blobUrl;
+  aud.load();
+  
+  window.setInterval(function() {
+    console.log(aud.readyState);
+  }, 1000);
+});
+</script>
+
+</body>
+</html>
