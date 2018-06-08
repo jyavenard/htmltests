@@ -6,23 +6,6 @@
 
 <script>
 
-const mediaConfig1 = {
-  type: 'media-source', // or 'file'
-  audio: {
-    contentType: 'audio/webm; codecs=opus',
-    channels: '2', // audio channels used by the track
-    bitrate: 132266, // number of bits used to encode a second of audio
-    samplerate: 48000 // number of samples of audio carried per second
-  },
-  video: {
-    contentType: 'video/webm; codecs="vp09.00.10.08"',
-    width: 1920,
-    height: 1080,
-    bitrate: 2646242, // number of bits used to encode a second of video
-    framerate: '25' // number of frames used in one second
-  }
-};
-
 const mediaConfig2 = {
   type: 'media-source', // or 'file'
   audio: {
@@ -33,44 +16,91 @@ const mediaConfig2 = {
   },
 };
 
-const mediaConfig3 = {
-  type: 'media-source', // or 'file'
-  audio: {
-    contentType: 'video/webm; codecs=opus',
-    channels: '2', // audio channels used by the track
-    bitrate: 132266, // number of bits used to encode a second of audio
-    samplerate: 48000 // number of samples of audio carried per second
-  },
-  video: {
-    contentType: 'audio/webm; codecs="vp09.00.10.08"',
-    width: 1920,
-    height: 1080,
-    bitrate: 2646242, // number of bits used to encode a second of video
-    framerate: '25' // number of frames used in one second
+async function test() {
+  const mediasDecoding = [ "file", "media-source" ];
+  const containerTypes = [ "webm", "mp4", "ogg", "flac", "mp3" ];
+  const audioCodecTypes = ["opus", "vorbis", "mp4a.40.2", "flac", "mp3" ];
+  const frequencies = [ "44100", "48000", "96000" ];
+  const videoCodecTypes = ["vp09.00.10.08", "avc1.42E01E", "vp9", "av1", "vp8", "vp08" ];
+  const videoResolutions = [ 480, 720, 1080, 2160 ];
+
+  try {
+    for (let containerAudio of containerTypes) {
+      for (let containerVideo of containerTypes) {
+        for (let audioType of audioCodecTypes) {
+          for (let frequency of frequencies) {
+            for (let videoType of videoCodecTypes) {
+              for (let height of videoResolutions) {
+                for (let media of mediasDecoding) {
+                  const audioMimeType = 'audio/' + containerAudio + '; codecs="' + audioType + '"';
+                  const videoMimeType = 'video/' + containerVideo + '; codecs="' + videoType + '"';
+                  const width = Math.round(height * 16 / 9);
+                  const mediaConfig = {
+                    type: media, // or 'file'
+                    audio: {
+                      contentType: audioMimeType,
+                      channels: '2.1', // audio channels used by the track
+                      bitrate: 132266, // number of bits used to encode a second of audio
+                      samplerate: frequency // number of samples of audio carried per second
+                    },
+                    video: {
+                      contentType: videoMimeType,
+                      width: width,
+                      height: height,
+                      bitrate: 2646242, // number of bits used to encode a second of video
+                      framerate: '25' // number of frames used in one second
+                    }
+                  };
+                  console.log("medias:" + media + " audio mimeType:" + audioMimeType + "@" + frequency + "Hz video mimeType:" + videoMimeType + " @" + width + "x" + height);
+                  let result = await navigator.mediaCapabilities.decodingInfo(mediaConfig);
+                  console.log('configuration is' +
+                    (result.supported ? '' : ' NOT') + ' supported,' +
+                    (result.smooth ? '' : ' NOT') + ' smooth and' +
+                    (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Test for encoders
+    const mimeTypes = ['video/webm; codecs="vp9"',
+                       'video/webm; codecs="vp8"', 'video/ogg; codecs="theora"'];
+    const mediasEncoding = [ "record", "transmission" ];
+    for (let mimeType of mimeTypes) {
+      for (let media of mediasEncoding) {
+        console.log("encoding type:" + media + " mimeType:" + mimeType);
+        const mediaConfig = {
+          type: media, // or 'file'
+          audio: {
+            contentType: 'audio/webm; codecs=opus',
+            channels: '2', // audio channels used by the track
+            bitrate: 132266, // number of bits used to encode a second of audio
+            samplerate: 48000 // number of samples of audio carried per second
+          },
+          video: {
+            contentType: mimeType,
+            width: 1920,
+            height: 1080,
+            bitrate: 2646242, // number of bits used to encode a second of video
+            framerate: '25' // number of frames used in one second
+          }
+        };
+        let result = await navigator.mediaCapabilities.encodingInfo(mediaConfig);
+        console.log('configuration is' +
+          (result.supported ? '' : ' NOT') + ' supported,' +
+          (result.smooth ? '' : ' NOT') + ' smooth and' +
+          (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
+      }
+    }
+  } catch (e) {
+    console.log("error: " + e);
   }
-};
+}
 
-navigator.mediaCapabilities.decodingInfo(mediaConfig1).then(result => {
-  console.log('This configuration is' +
-      (result.supported ? '' : ' NOT') + ' supported,' +
-      (result.smooth ? '' : ' NOT') + ' smooth and' +
-      (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
-});
-
-navigator.mediaCapabilities.decodingInfo(mediaConfig2).then(result => {
-  console.log('This configuration is' +
-      (result.supported ? '' : ' NOT') + ' supported,' +
-      (result.smooth ? '' : ' NOT') + ' smooth and' +
-      (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
-});
-
-navigator.mediaCapabilities.decodingInfo(mediaConfig3).then(result => {
-  console.log('This configuration is' +
-      (result.supported ? '' : ' NOT') + ' supported,' +
-      (result.smooth ? '' : ' NOT') + ' smooth and' +
-      (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
-});
-
+test();
 </script>
 
 </body>
