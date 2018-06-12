@@ -1,0 +1,118 @@
+<html>
+<head>
+<title>Firefox Media Capabilities test</title>
+</head>
+<body>
+
+<script>
+
+const mediaConfig2 = {
+  type: 'media-source', // or 'file'
+  audio: {
+    contentType: 'audio/webm; codecs=opus',
+    channels: '2', // audio channels used by the track
+    bitrate: 132266, // number of bits used to encode a second of audio
+    samplerate: 48000 // number of samples of audio carried per second
+  },
+};
+
+async function decodingInfo(mediaConfig) {
+  var p = new Promise(function(resolve, reject) {
+    let obj = new Object();
+    obj.supported = true;
+    obj.smooth = true;
+    obj.powerEfficient = true;
+    resolve(obj);
+  });
+  return p;
+}
+
+async function test() {
+  const mediasDecoding = [ "file", "media-source" ];
+  const containerTypes = [ "mp4", "webm", "ogg", "flac", "mp3" ];
+  const audioCodecTypes = ["opus", "vorbis", "mp4a.40.2", "flac", "mp3" ];
+  const frequencies = [ "44100", "48000", "96000" ];
+  const videoCodecTypes = ["avc1.42E01E", "vp9", "vp09.00.10.08", "av1", "vp8", "vp08" ];
+  const videoResolutions = [ 480, 720, 1080, 2160 ];
+
+  try {
+    for (let containerAudio of containerTypes) {
+      for (let containerVideo of containerTypes) {
+        for (let audioType of audioCodecTypes) {
+          for (let frequency of frequencies) {
+            for (let videoType of videoCodecTypes) {
+              for (let height of videoResolutions) {
+                for (let media of mediasDecoding) {
+                  const audioMimeType = 'audio/' + containerAudio + '; codecs="' + audioType + '"';
+                  const videoMimeType = 'video/' + containerVideo + '; codecs="' + videoType + '"';
+                  const width = Math.round(height * 16 / 9);
+                  const mediaConfig = {
+                    type: media, // or 'file'
+                    audio: {
+                      contentType: audioMimeType,
+                      channels: '2.1', // audio channels used by the track
+                      bitrate: 132266, // number of bits used to encode a second of audio
+                      samplerate: frequency // number of samples of audio carried per second
+                    },
+                    video: {
+                      contentType: videoMimeType,
+                      width: width,
+                      height: height,
+                      bitrate: 2646242, // number of bits used to encode a second of video
+                      framerate: '25' // number of frames used in one second
+                    }
+                  };
+                  console.log("medias:" + media + " audio mimeType:" + audioMimeType + "@" + frequency + "Hz video mimeType:" + videoMimeType + " @" + width + "x" + height);
+                  let result = await decodingInfo(mediaConfig);
+                  console.log('configuration is' +
+                    (result.supported ? '' : ' NOT') + ' supported,' +
+                    (result.smooth ? '' : ' NOT') + ' smooth and' +
+                    (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Test for encoders
+    const mimeTypes = ['video/webm; codecs="vp9"',
+                       'video/webm; codecs="vp8"', 'video/ogg; codecs="theora"'];
+    const mediasEncoding = [ "record", "transmission" ];
+    for (let mimeType of mimeTypes) {
+      for (let media of mediasEncoding) {
+        console.log("encoding type:" + media + " mimeType:" + mimeType);
+        const mediaConfig = {
+          type: media, // or 'file'
+          audio: {
+            contentType: 'audio/webm; codecs=opus',
+            channels: '2', // audio channels used by the track
+            bitrate: 132266, // number of bits used to encode a second of audio
+            samplerate: 48000 // number of samples of audio carried per second
+          },
+          video: {
+            contentType: mimeType,
+            width: 1920,
+            height: 1080,
+            bitrate: 2646242, // number of bits used to encode a second of video
+            framerate: '25' // number of frames used in one second
+          }
+        };
+        let result = await navigator.mediaCapabilities.encodingInfo(mediaConfig);
+        console.log('configuration is' +
+          (result.supported ? '' : ' NOT') + ' supported,' +
+          (result.smooth ? '' : ' NOT') + ' smooth and' +
+          (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
+      }
+    }
+  } catch (e) {
+    console.log("error: " + e);
+  }
+}
+
+test();
+</script>
+
+</body>
+</html>
