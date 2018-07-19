@@ -19,6 +19,13 @@ for (let container of containers) {
     html += 'v.canPlayType("' + mimeType + ') = ' + canplay + "<br/>";
   }
 }
+for (let container of containers) {
+  for (let codec of codecs) {
+    let mimeType = container + '; codecs="' + codec + '"'
+    let canplay = MediaSource.isTypeSupported(mimeType);
+    html += 'MediaSource.isTypeSupported("' + mimeType + ') = ' + canplay + "<br/>";
+  }
+}
   
 document.getElementById("canplay").innerHTML = html;
 </script>
