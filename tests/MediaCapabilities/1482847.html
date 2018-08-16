@@ -1,0 +1,73 @@
+<html>
+<head>
+<title>Firefox Media Capabilities test</title>
+</head>
+<body>
+
+<p><pre id="log"></pre></p>
+
+<script src="../mse_mp4/common.js"></script>
+
+<script>
+
+var logger = new Logger('log');
+logger.log('Log: (times in ms)');
+
+async function test() {
+  const mediasDecoding = ["media-source" ];
+  const containerTypes = [ "webm"];
+  const audioCodecTypes = ["opus" ];
+  const frequencies = [ "44100" ];
+  const videoCodecTypes = ["vp9"];
+  const videoResolutions = [ 480 ];
+
+  try {
+    for (let containerAudio of containerTypes) {
+      for (let containerVideo of containerTypes) {
+        for (let audioType of audioCodecTypes) {
+          for (let frequency of frequencies) {
+            for (let videoType of videoCodecTypes) {
+              for (let height of videoResolutions) {
+                for (let media of mediasDecoding) {
+                  const audioMimeType = 'audio/' + containerAudio + '; codecs="' + audioType + '"';
+                  const videoMimeType = 'video/' + containerVideo + '; codecs="' + videoType + '"';
+                  const width = Math.round(height * 16 / 9);
+                  const mediaConfig = {
+                    type: media, // or 'file'
+                    audio: {
+                      contentType: audioMimeType,
+                      channels: '2.1', // audio channels used by the track
+                      bitrate: 132266, // number of bits used to encode a second of audio
+                      samplerate: frequency // number of samples of audio carried per second
+                    },
+                    video: {
+                      contentType: videoMimeType,
+                      width: width,
+                      height: height,
+                      bitrate: 2646242, // number of bits used to encode a second of video
+                      framerate: '25' // number of frames used in one second
+                    }
+                  };
+                  logger.log("medias:" + media + " audio mimeType:" + audioMimeType + "@" + frequency + "Hz video mimeType:" + videoMimeType + " @" + width + "x" + height);
+                  let result = await navigator.mediaCapabilities.decodingInfo(mediaConfig);
+                  logger.log('configuration is' +
+                    (result.supported ? '' : ' NOT') + ' supported,' +
+                    (result.smooth ? '' : ' NOT') + ' smooth and' +
+                    (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.log("error: " + e);
+  }
+}
+
+test();
+</script>
+
+</body>
+</html>
