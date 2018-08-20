@@ -18,8 +18,8 @@ function test() {
   const containerTypes = [ 'mp4', 'webm'];
   const audioCodecTypes = ["opus" ];
   const frequencies = [ "48000" ];
-  const videoCodecTypes = ["avc1.42E01E", "vp9", "vp09.00.10.08", "av1", "vp8" ];
-  const videoResolutions = [ 480, 720, 1080, 2160 ];
+  const videoCodecTypes = ["avc1.42E01E", "vp9" ];
+  const videoResolutions = [ 480, 720 ];
 
   function process(mediaConfig) {
     navigator.mediaCapabilities.decodingInfo(mediaConfig).then(function(result) {
