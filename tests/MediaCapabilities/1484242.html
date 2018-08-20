@@ -13,14 +13,24 @@
 var logger = new Logger('log');
 logger.log('Log: (times in ms)');
 
-async function test() {
+function test() {
   const mediasDecoding = ["media-source" ];
-  const containerTypes = [ "webm"];
+  const containerTypes = [ 'mp4', 'webm'];
   const audioCodecTypes = ["opus" ];
-  const frequencies = [ "44100" ];
-  const videoCodecTypes = ["avc1.42E01E", "vp9", "vp09.00.10.08", "av1", "vp8", "vp08" ];
+  const frequencies = [ "48000" ];
+  const videoCodecTypes = ["avc1.42E01E", "vp9", "vp09.00.10.08", "av1", "vp8" ];
   const videoResolutions = [ 480, 720, 1080, 2160 ];
 
+  function process(mediaConfig) {
+    navigator.mediaCapabilities.decodingInfo(mediaConfig).then(function(result) {
+      logger.log("medias:" + mediaConfig['type'] + " audio mimeType:" + mediaConfig['audio']['contentType'] + "@" + mediaConfig['audio']['samplerate'] + "Hz video mimeType:" + mediaConfig['video']['contentType'] + " @" + mediaConfig['video']['width'] + "x" + mediaConfig['video']['height'] + 
+        ' is' +
+        (result.supported ? '' : ' NOT') + ' supported,' +
+        (result.smooth ? '' : ' NOT') + ' smooth and' +
+        (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
+      });
+  }
+  
   try {
     for (let containerAudio of containerTypes) {
       for (let containerVideo of containerTypes) {
@@ -48,13 +58,8 @@ async function test() {
                       framerate: '25' // number of frames used in one second
                     }
                   };
-                  logger.log("medias:" + media + " audio mimeType:" + audioMimeType + "@" + frequency + "Hz video mimeType:" + videoMimeType + " @" + width + "x" + height);
-                  navigator.mediaCapabilities.decodingInfo(mediaConfig).then(function(result) {
-                    logger.log('configuration is' +
-                      (result.supported ? '' : ' NOT') + ' supported,' +
-                      (result.smooth ? '' : ' NOT') + ' smooth and' +
-                      (result.powerEfficient ? '' : ' NOT') + ' power efficient.');
-                    });
+                  logger.log("processing medias:" + media + " audio mimeType:" + audioMimeType + "@" + frequency + "Hz video mimeType:" + videoMimeType + " @" + width + "x" + height);
+                  process(mediaConfig);
                 }
               }
             }
@@ -63,7 +68,7 @@ async function test() {
       }
     }
   } catch (e) {
-    console.log("error: " + e);
+    logger.log("error: " + e);
   }
 }
 
