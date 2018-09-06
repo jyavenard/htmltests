@@ -13,14 +13,28 @@ Result : <a id="text"></a></br>
   var failCount = 0;
 
   function play_until_success() {
+    var p = video.play() || null;
+    if (p === null) {
+      // play() doesn't return a promise with this browser
+      text.innerHTML = "attempting play";
+      video.onplaying = function() {
+        text.innerHTML = "play success";
+      };
+    } else {
+      text.innerHTML = "waiting on play promise to be resolved";
+      p.then(function() {
+        text.innerHTML = "play success";
+      }, function() {
+        text.innerHTML = `play rejected, fail count=${++failCount}`;
+        setTimeout(function() {
+          play_until_success();
+        }, 1000);
+      });
+    }
     video.play();
-    text.innerHTML = "attempting play";
-    video.onplaying = () => {
-      text.innerHTML = "play success";
-    };
   }
 
-  video.oncanplay = () => {
+  video.oncanplay = function() {
     play_until_success();
   };
 </script>
