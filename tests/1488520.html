@@ -1,0 +1,28 @@
+<html>
+<head>
+  <title>call video.play() on fragmented content</title>
+</head>
+<body>
+Result : <a id="text"></a></br>
+</br>
+<video id="v1" src="../mediatest/fragmented/bunny.mp4"></video>
+<script type="text/javascript">
+  var video = document.getElementById("v1");
+  video.preload = "auto";
+  var text = document.getElementById("text");
+  var failCount = 0;
+
+  function play_until_success() {
+    video.play();
+    text.innerHTML = "attempting play";
+    video.onplaying = () => {
+      text.innerHTML = "play success";
+    };
+  }
+
+  video.oncanplay = () => {
+    play_until_success();
+  };
+</script>
+</body>
+</html>
