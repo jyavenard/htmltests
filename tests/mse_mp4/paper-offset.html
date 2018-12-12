@@ -90,6 +90,7 @@ var files = {};
 mediaSource.addEventListener('sourceopen', function(e) {
     mediaSource.removeEventListener('sourceopen', arguments.callee);
     logger.log('* mediaSource.sourceopen - mediaSource readyState: ' + this.readyState);
+    logger.log('* video.readyState = ' + video.readyState);
 
     logger.log('mediaSource.addSourceBuffer(\'' + MIME + (CODECS ? ("; codecs=" + CODECS) : "") + ')');
     try {
@@ -102,11 +103,13 @@ mediaSource.addEventListener('sourceopen', function(e) {
     sourceBuffer.addEventListener('updatestart', function(e){ logger.log('* sourceBuffer.updatestart'); });
     sourceBuffer.addEventListener('update', function(e){ logger.log('* sourceBuffer.update'); });
     sourceBuffer.addEventListener('updateend', function(e){ logger.log('* sourceBuffer.updateend'); logger.log('sourceBuffer.buffered.length = ' + this.buffered.length);  logger.log('sourceBuffer.buffered = ' + printTimeRange(sourceBuffer.buffered)); if (this.buffered.length) { var dur = this.buffered.end(0) - this.buffered.start(0); logger.log('sourceBuffer.duration = ' + dur.toString()); } else { logger.log('sourceBuffer.duration = 0'); } logger.log('video.duration=' + video.duration); logger.log('mediasource.duration = ' + mediaSource.duration); logger.log('video.buffered =' + printTimeRange(video.buffered));
+    logger.log('video.readyState = ' + video.readyState);
 });
     sourceBuffer.addEventListener('error', function(e){ logger.log('* sourceBuffer.error'); });
     sourceBuffer.addEventListener('abort', function(e){ logger.log('* sourceBuffer.abort'); });
 
     logger.log('mediaSource readyState: ' + this.readyState);
+    logger.log('video.readyState = ' + video.readyState);
 
     GETALL(FILES, function(urls, files) {
         function play(fi) {
@@ -150,10 +153,12 @@ mediaSource.addEventListener('sourceopen', function(e) {
                       logger.log('sourcebuffer.buffered = ' + printTimeRange(sourceBuffer.buffered));
                       logger.log('video.buffered =' + printTimeRange(video.buffered));
                       logger.log('mediaSource.readyState = ' + mediaSource.readyState);
+                      logger.log('video.readyState = ' + video.readyState);
                       mediaSource.endOfStream();
                      });
                     logger.log('sourceBuffer.remove(DURATION, ' + sourceBuffer.buffered.end(0) + ')');
                     logger.log('mediaSource.readyState = ' + mediaSource.readyState);
+                    logger.log('video.readyState = ' + video.readyState);
                     sourceBuffer.remove(DURATION, sourceBuffer.buffered.end(0));
                   });
                   try {
