@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+    <title>Seamless MSE Audio Test</title>
+</head>
+<body>
+    <div>
+        <audio id="audio0" controls=""></audio><br/>
+        <span>Sine wave - 10 segments @ 1 seconds each</span><br/><br/><br/>
+    </div>
+    <script type="text/javascript" src="main.js"></script>
+    <script type="text/javascript">
+        'use strict';
+
+        // Initialize gapless audios
+        window.initGaplessAudio(
+            document.getElementById('audio0'),
+            [
+                'audio/sine_0.mp4',
+                'audio/sine_1.mp4',
+                'audio/sine_2.mp4',
+                'audio/sine_3.mp4',
+                'audio/sine_4.mp4',
+                'audio/sine_5.mp4',
+                'audio/sine_6.mp4',
+                'audio/sine_7.mp4',
+                'audio/sine_8.mp4',
+                'audio/sine_9.mp4'
+            ]
+        );
+    </script>
+</body>
+</html>
