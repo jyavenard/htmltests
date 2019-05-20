@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Audiotest 1</title>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<script type="text/Javascript" src="jquery-3.1.1.min.js"></script>
+		<script>
+			var file = "10.mp4";
+			
+			function playSound(file, nocache) {
+				// Check if file should not be cached
+				if (typeof nocache === 'undefined') nocache = false;
+				if (nocache) file = getNoCacheFile(file);
+				
+				// Create Audio element and play
+				var audioelement = new Audio(file);
+				audioelement.play();
+			}
+			
+			function getNoCacheFile(file) {
+				return file + "?_=" + Date.now();
+			}
+			
+			function changeFile(elem) {
+				file = elem.value;
+				alert(file);
+			}
+		</script>
+		<style>
+		* {
+			font-size:26px;
+			margin:0;
+			padding:0;
+		}
+		body {
+			padding:20px;
+		}
+		a {
+			cursor:pointer;
+			color:blue;
+			text-decoration:underline;
+		}
+		table {
+			boder-collapse:collapse;
+		}
+		td {
+			border:1px solid #000;
+			padding:5px;
+		}
+		h2 {
+			margin-top:40px;
+			margin-bottom:20px;
+		}
+		.green {
+			background-color:#5f5;
+		}
+		.red {
+			background-color:#f55;
+		}
+		</a>
+		</style>
+	</head>
+	<body>
+		<h1>M4A - Audio Test</h1>
+		Test how m4a files are played in the browser. I had problems to play m4a-files in firefox correctly. Chrome and IE worked fine for me.<br />
+		Please follow the test steps in order in Firefox. On your first visit you can skip step 1 and 2. But if you repeat the test you must first reset the cache an reload the page.<br />
+		<br />
+		Current audio test file: <br />
+		<input type="text" name="filename" id="filename" onchange="changeFile(this);">
+		<button onclick="changeFile($(#filename).val());">change audio file</button>
+		<div style="font-size:12px;">To reset, just reload the page.</div><br />
+		
+		<h2>Tests with browser cache</h1>
+		<table>
+			<tr>
+				<th>Step</th>
+				<th>Action / Play Audio</th>
+				<th>My Results in Firefox</th>
+			</tr>
+			<tr>
+				<td>1</td>
+				<td><a href="https://support.mozilla.org/en-US/kb/how-clear-firefox-cache#w_clear-the-cache" target="_blank">Clear Firefox-Cache</a></td>
+				<td>Firefox Cache is empty</td>
+			</tr>
+			<tr>
+				<td>2</td>
+				<td><a onclick="location.reload();">Reload Page</a></td>
+				<td>M4A file is not in cache anymore</td>
+			</tr>
+			<tr>
+				<td>3</td>
+				<td><a onclick="playSound(file);">Test as Javascript Audio Element</a></td>
+				<td class="red">Not Working, no sound</td>
+			</tr>
+			<tr>
+				<td>4</td>
+				<td><a onclick="window.open(file);" target="_blank">Test as link - working</a></td>
+				<td class="green">Working, sound plays</td>
+			</tr>
+			<tr>
+				<td>5</td>
+				<td>Repeat Step 3</td>
+				<td class="green">Working, sound plays</td>
+			</tr>
+			</tr>
+		</table>
+		
+		<h2>Tests without browser cache (attached timestamp to link)</h1>
+		<table>
+			<tr>
+				<th>Step</th>
+				<th>Action / Play Audio</th>
+				<th>My Results in Firefox</th>
+			</tr>
+			<tr>
+				<td>6</td>
+				<td><a onclick="window.open(getNoCacheFile(file));">Test as link - working</a></td>
+				<td class="green">Working, sound plays</td>
+			</tr>
+			<tr>
+				<td>7</td>
+				<td><a onclick="playSound(file, true);">Test as Javascript Audio Element</a></td>
+				<td class="red">Not Working, no sound</td>
+			</tr>
+		</table>
+		<br />
+		Here is the same Audio Test with a different file and different results:<br />
+		<a href="test2.html">Test 2</a>
+		<script>
+			$('#filename').val(file);
+			if (navigator.userAgent.toLowerCase().indexOf('firefox') <= -1){
+				alert('You are not using Firefox. All tests should work fine. To reproduce the errors you have to use Firefox.');
+			}
+		</script>
+	</body>
+</html>
