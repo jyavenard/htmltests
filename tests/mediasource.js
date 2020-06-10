@@ -136,3 +136,55 @@ function fetchAndLoad(sb, prefix, chunks, suffix) {
     return rv;
   });
 }
+
+var SimpleTest = {};
+/**
+ * Tells SimpleTest to don't finish the test when the document is loaded,
+ * useful for asynchronous tests.
+ *
+ * When SimpleTest.waitForExplicitFinish is called,
+ * explicit SimpleTest.finish() is required.
+**/
+SimpleTest.waitForExplicitFinish = function () {
+    SimpleTest._stopOnLoad = false;
+};
+
+/**
+ * Finishes the tests. This is automatically called, except when
+ * SimpleTest.waitForExplicitFinish() has been invoked.
+**/
+SimpleTest.finish = function () {
+    _logger.log("SimpleTest.finish");
+};
+
+/**
+ * Shows the report in the browser
+**/
+
+SimpleTest.showReport = function() {
+    var togglePassed = A({'href': '#'}, "Toggle passed tests");
+    var toggleFailed = A({'href': '#'}, "Toggle failed tests");
+    togglePassed.onclick = partial(SimpleTest.toggleByClass, 'test_ok');
+    toggleFailed.onclick = partial(SimpleTest.toggleByClass, 'test_not_ok');
+    var body = document.body;  // Handles HTML documents
+    if (!body) {
+	// Do the XML thing
+	body = document.getElementsByTagNameNS("http://www.w3.org/1999/xhtml",
+					       "body")[0]
+    }
+    var firstChild = body.childNodes[0];
+    var addNode;
+    if (firstChild) {
+        addNode = function (el) {
+            body.insertBefore(el, firstChild);
+        };
+    } else {
+        addNode = function (el) {
+            body.appendChild(el)
+        };
+    }
+    addNode(togglePassed);
+    addNode(SPAN(null, " "));
+    addNode(toggleFailed);
+    addNode(SimpleTest.report());
+};

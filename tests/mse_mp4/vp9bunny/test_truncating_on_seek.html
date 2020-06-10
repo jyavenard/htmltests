@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+  <title>MSE: |waiting| event when source data is missing</title>
+  <script type="text/javascript" src="../mediasource.js"></script>
+</head>
+<body>
+<pre id="test"><script class="testbody" type="text/javascript">
+
+SimpleTest.waitForExplicitFinish();
+
+runWithMSE(async (ms, el) => {
+  el.controls = true;
+  await once(ms, "sourceopen");
+  ok(true, "Receive a sourceopen event");
+  const sb = ms.addSourceBuffer("video/mp4");
+  sb.timestampOffset = -90204.79;
+  await fetchAndLoad(sb, "720p60-init-1667746830", [""], ".mp4");
+  await fetchAndLoad(sb, "720p60-segment-45066", [""], ".mp4");
+  var start = sb.buffered.start(0);
+  info("duration =" + el.duration);
+  info("seeking to " + start);
+  el.currentTime = start;
+  // HTMLMediaElement fires "waiting" if somebody invokes |play()| before the MDSM
+  // has notified it of available data. Make sure that we get "playing" before
+  // we starting waiting for "waiting".
+  info("Invoking play()");
+  let p = once(el, "playing");
+  el.play();
+  await p;
+  ok(true, "Video playing. It should play for a bit, then fire 'waiting'");
+  p = once(el, "waiting");
+  el.play();
+  await p;
+  p = once(el, "waiting");
+  await fetchAndLoad(sb, "720p60-segment-45067", [""], ".mp4");
+  await p;
+  p = once(el, "waiting");
+  await fetchAndLoad(sb, "720p60-segment-45068", [""], ".mp4");
+  await p;
+  p = once(el, "ended");
+  ms.endOfStream();
+  await p;
+  SimpleTest.finish();
+});
+
+</script>
+</pre>
+</body>
+</html>
