@@ -185,3 +185,31 @@ function fetchAndLoad(sb, prefix, chunks, suffix) {
     return rv;
   });
 }
+
+function info(message) {
+  _logger.log(message);	
+}
+
+function ok(value, message) {
+  _logger.log("ok" + (value ? "(true) " : "(false) ") + message);	
+}
+
+function is(value1, value2, message) {
+  var result = value1 == value2;
+  _logger.log("is(" + value1 + " == " + value2 + "): " + result + " (" + message + ")");	
+}
+
+function isfuzzy(value1, value2, fuzz, message) {
+  var result = (value1 >= value2 - fuzz && value1 <= value2 + fuzz);
+  _logger.log("" + value1 + " == " + value2 + " ~" + fuzz + ": " + result + " (" + message + ")");	
+}
+
+var SimpleTest = {};
+
+SimpleTest.waitForExplicitFinish = function() {
+  _logger.log("SimpleTest.waitForExplicitFinish()");
+};
+
+SimpleTest.finish = function() {
+  _logger.log("SimpleTest.finish()");
+};
