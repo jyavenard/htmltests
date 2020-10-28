@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>test MP3 decoder delay</title>
+  <script type="text/javascript" src="../common.js"></script>
+</head>
+<body>
+<p><pre id="log"></pre></p>
+<script class="testbody" type="text/javascript">
+
+var logger = new Logger('log');
+logger.log('Log: (times in ms)');
+
+SimpleTest.waitForExplicitFinish();
+
+var tests = [
+  {
+    name: "half-a-second-8000.mp3",
+    duration: 0.5
+  },
+  {
+    name: "half-a-second-48000.mp3",
+    duration: 0.5
+  },
+  {
+    name: "v3.mp3",
+    duration: 3
+  },
+  {
+    // Weird file that has the end padding larger than a packet size.
+    name: "cropped_8000hz_8kbs_mono_lame3.100.abr.mp3",
+    duration: 28.65675
+  }
+];
+
+async function doit(t) {
+  var count = 0;
+  var context = new OfflineAudioContext(1, 128, 48000);
+  tests.forEach(async testcase => {
+    var response = await fetch(testcase.name);
+    var buffer = await response.arrayBuffer();
+    var decoded = await context.decodeAudioData(buffer);
+    is(decoded.duration, testcase.duration, "The file is half a second.");
+    if (++count == tests.length) {
+      SimpleTest.finish();
+    }
+  });
+}
+
+doit();
+
+</script>
+</body>
+</html>
