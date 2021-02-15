@@ -27,7 +27,7 @@ runWithMSE(function(ms, el) {
 
     ok(true, "Receive a sourceopen event");
         
-    var videosb = ms.addSourceBuffer("video/mp4");
+    var videosb = ms.addSourceBuffer("video/mp4; codecs=mp4a.40.2,avc1.4d4015");
     if (!!!videosb.changeType) {
       info('changeType API is not available');
     }
@@ -59,7 +59,7 @@ runWithMSE(function(ms, el) {
     .then(function() {
       videosb.timestampOffset = el.buffered.end(0);
       try {
-        videosb.changeType("video/webm");
+        videosb.changeType("video/webm; codecs=vorbis,vp9");
       } catch (e) {
         ok(false, "shouldn't throw an exception");
         SimpleTest.finish();
