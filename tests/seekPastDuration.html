@@ -26,13 +26,16 @@
         logger.log('* video.loadeddata');
         logger.log('video.duration = ' + video.duration);
         logger.log('seeking to 10s past duration ' + (video.duration + 10));
+        logger.log('video.ended = ' + video.ended);
         video.currentTime = video.duration + 10;
         logger.log('video.seeking = ' + video.seeking);
         logger.log('video.currentTime = ' + video.currentTime);
+        logger.log('video.ended = ' + video.ended);
         logger.log('await once(video, "seeked")');
         await once(video, "seeked");
         logger.log('* video.seeked');
         logger.log('video.currentTime = ' + video.currentTime);
+        logger.log('video.ended = ' + video.ended);
     });
 
 </script>
