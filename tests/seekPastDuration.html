@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>MediaSource API Demo</title>
+</head>
+<body>
+
+<h3>Seek Below Duration</h3>
+
+<section>
+    <video src="../mediatest/mp4/ChID-BLITS-EBU-4.mp4" controls width="320" height="240"></video>
+    <p>permalink: <a id="permalink" href=""></a></p>
+    <p><pre id="log"></pre></p>
+</section>
+
+<script src="common.js"></script>
+
+<script>
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+
+    var video = document.querySelector('video');
+    video.addEventListener('loadeddata', async function(e) {
+        logger.log('* video.loadeddata');
+        logger.log('video.duration = ' + video.duration);
+        logger.log('seeking to 10s past duration ' + (video.duration + 10));
+        video.currentTime = video.duration + 10;
+        logger.log('video.seeking = ' + video.seeking);
+        logger.log('video.currentTime = ' + video.currentTime);
+        logger.log('await once(video, "seeked")');
+        await once(video, "seeked");
+        logger.log('* video.seeked');
+        logger.log('video.currentTime = ' + video.currentTime);
+    });
+
+</script>
+</body>
+</html>
