@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
-    <title>MediaSource API Demo</title>
+    <title>Seeking past a media element's duration</title>
 </head>
 <body>
 
@@ -26,6 +26,7 @@
         logger.log('* video.loadeddata');
         logger.log('video.duration = ' + video.duration);
         logger.log('seeking to 10s past duration ' + (video.duration + 10));
+        logger.log('video.readyState = ' + video.readyState);
         logger.log('video.ended = ' + video.ended);
         video.currentTime = video.duration + 10;
         logger.log('video.seeking = ' + video.seeking);
@@ -35,6 +36,7 @@
         await once(video, "seeked");
         logger.log('* video.seeked');
         logger.log('video.currentTime = ' + video.currentTime);
+        logger.log('video.readyState = ' + video.readyState);
         logger.log('video.ended = ' + video.ended);
     });
 
