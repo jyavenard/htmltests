@@ -20,6 +20,14 @@ function info(message) {
   logger.log(message);	
 }
 
+function Log(token, message) {
+   logger.log("" + token + ":" + message);
+}
+    
+function TimeStamp(token) {
+    return "" + token;
+}
+
 function printDuration(logger, sb, ms) {
       logger.log('sourceBuffer.buffered.length = ' + sb.buffered.length);
       if (sb.buffered.length) {
