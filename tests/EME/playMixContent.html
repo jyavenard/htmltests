@@ -78,7 +78,7 @@
         return finish.promise;
       })
       .catch(reason => ok(false, reason))
-      .then(() => manager.finished(token));
+      .then(() => SimpleTest.finish(token));
     }
     
     async function runTest() {
