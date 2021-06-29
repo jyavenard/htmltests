@@ -33,10 +33,10 @@ runWithMSE(function(ms, el) {
     });
     is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
     var promises = [];
-    let p = fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', range(0, 6), '.bin');
+    let p = fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', range(0, 2), '.bin');
     p.then(function() {
       el.play();
-      return fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', ['6'], '.bin');
+      return fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', range(6, 10), '.bin');
     })
     .then(function() {
       el.currentTime = 18090.001;
@@ -44,11 +44,15 @@ runWithMSE(function(ms, el) {
     })
     .then(function() {
       info("duration " + el.duration);
-      return fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', range(7, 10), '.bin');
+      ms.endOfStream();
+      return once(ms, 'sourceended');
     })
-    .then(async function() {
-      info("duration " + el.duration);
-      ok(el.currentTime >= el.buffered.end(0), "played to the end");
+    .then(function() {
+      info("playing to the end");
+      return once(el, 'ended');
+    })
+    .then(function() {
+      ok(el.currentTime >= el.buffered.end(1), "played to the end");
       SimpleTest.finish();
     })
   });
