@@ -1,0 +1,60 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: changeType functionality</title>
+  <script type="text/javascript" src="../../mediasource.js"></script>
+</head>
+<body>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+// This test checks loading a stereo segment, followed by a 5.1 segment plays without error.
+
+runWithMSE(function(ms, el) {
+  el.controls = true;
+  once(ms, 'sourceopen').then(function() {
+    // Log events for debugging.
+    var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                  "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                  "waiting", "pause", "durationchange", "seeking", "seeked"];
+    function logEvent(e) {
+      var v = e.target;
+      info("got " + e.type + " event");
+    }
+    events.forEach(function(e) {
+      el.addEventListener(e, logEvent);
+    });
+
+    ok(true, "Receive a sourceopen event");
+    var audiosb = ms.addSourceBuffer("audio/webm; codecs=opus");
+    el.addEventListener("error", function(e) {
+      ok(false, "should not fire '" + e.type + "' event");
+      SimpleTest.finish();
+    });
+    is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
+    var promises = [];
+    let p = fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', range(0, 6), '.bin');
+    p.then(function() {
+      el.play();
+      return fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', ['6'], '.bin');
+    })
+    .then(function() {
+      el.currentTime = 18090.001;
+      return once(el, 'seeked');
+    })
+    .then(function() {
+      info("duration " + el.duration);
+      return fetchAndLoad(audiosb, 'tmp/mediasource/segment-7f82c3103800-00', range(7, 10), '.bin');
+    })
+    .then(async function() {
+      info("duration " + el.duration);
+      ok(el.currentTime >= el.buffered.end(0), "played to the end");
+      SimpleTest.finish();
+    })
+  });
+});
+
+</script>
+</pre>
+</body>
+</html>
