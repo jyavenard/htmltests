@@ -26,6 +26,10 @@
       <option value="half-a-second-8000.mp3">half-a-second-8000.mp3</option>
       <option value="half-a-second-48000.mp3">half-a-second-48000.mp3</option>
     </select>
+    <select id="rate">
+      <option value="48000">48000</option>
+      <option value="44100">44100</option>
+    </select>
     <button class="play">Play</button>
     <button class="stop">Stop</button>
     <span class="decoded-frames">0</span>
@@ -77,7 +81,9 @@ loopendControl.setAttribute('disabled', 'disabled');
 // Then we put the buffer into the source
 
 function getData() {
-  audioCtx = new AudioContext();
+  audioCtx = new AudioContext({
+    sampleRate: parseInt(document.getElementById("rate").value),
+  });
   source = audioCtx.createBufferSource();
   request = new XMLHttpRequest();
 
