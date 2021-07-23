@@ -8,18 +8,28 @@
     <title>decodeAudioData example</title>
 
     <link rel="stylesheet" href="">
-    <!--[if lt IE 9]>
-      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]-->
   </head>
 
   <body>
     <h1>decodeAudioData example</h1>
 
-    <p>Note: This example does not work in Safari, due to some kind of bug.</p>
+    <p>Note: This example does not work in Safari (looping attribute), due to some kind of bug.</p>
 
+    <select id="file">
+      <option value="opus.webm">opus.webm</option>
+      <option value="vorbis.webm">vorbis.webm</option>
+      <option value="Aprils.webm">April.webm</option>
+      <option value="viper-opus.webm">viper-opus.webm</option>
+      <option value="viper-vorbis.webm">viper-vorbis.webm</option>
+      <option value="viper.mp3">viper.mp3</option>
+      <option value="v3.mp3">v3.mp3</option>
+      <option value="half-a-second-8000.mp3">half-a-second-8000.mp3</option>
+      <option value="half-a-second-48000.mp3">half-a-second-48000.mp3</option>
+    </select>
     <button class="play">Play</button>
     <button class="stop">Stop</button>
+    <span class="decoded-frames">0</span>
+    <div class="error" hidden><font color="red">Decoding Error</font></div>
 
     <h2>Set playback rate</h2>
     <input class="playback-rate-control" type="range" min="0.25" max="3" step="0.05" value="1">
@@ -47,6 +57,8 @@ const pre = document.querySelector('pre');
 const myScript = document.querySelector('script');
 const play = document.querySelector('.play');
 const stop = document.querySelector('.stop');
+const decoded = document.querySelector('.decoded-frames');
+const error = document.querySelector('.error');
 
 const playbackControl = document.querySelector('.playback-rate-control');
 const playbackValue = document.querySelector('.playback-rate-value');
@@ -65,16 +77,11 @@ loopendControl.setAttribute('disabled', 'disabled');
 // Then we put the buffer into the source
 
 function getData() {
-  if(window.webkitAudioContext) {
-    audioCtx = new window.webkitAudioContext();
-  } else {
-    audioCtx = new window.AudioContext();
-  }
-
+  audioCtx = new AudioContext();
   source = audioCtx.createBufferSource();
   request = new XMLHttpRequest();
 
-  request.open('GET', 'opus.webm', true);
+  request.open('GET', document.getElementById("file").value, true);
 
   request.responseType = 'arraybuffer';
 
@@ -89,12 +96,16 @@ function getData() {
         source.playbackRate.value = playbackControl.value;
         source.connect(audioCtx.destination);
         source.loop = true;
-
+        decoded.innerHTML = buffer.length + " frames " + buffer.duration;
         loopstartControl.setAttribute('max', Math.floor(songLength));
         loopendControl.setAttribute('max', Math.floor(songLength));
+        error.setAttribute('hidden', 'hidden');
       },
 
-      function(e){"Error with decoding audio data" + e.error});
+      function(e){
+        error.removeAttribute('hidden');
+        "Error with decoding audio data" + e.error
+      });
 
   }
 
