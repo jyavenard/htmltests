@@ -26,6 +26,8 @@
       <option value="half-a-second-8000.mp3">half-a-second-8000.mp3</option>
       <option value="half-a-second-48000.mp3">half-a-second-48000.mp3</option>
       <option value="opus1s.webm">opus1s.webm</option>
+      <option value="oscillator-custom-actual.wav">oscillator-custom-actual.wav</option>
+      <option value="opus-mapping2.webm">opus-mapping2.webm</option>
     </select>
     <select id="rate">
       <option value="48000">48000</option>
@@ -103,7 +105,7 @@ function getData() {
         source.playbackRate.value = playbackControl.value;
         source.connect(audioCtx.destination);
         source.loop = true;
-        decoded.innerHTML = buffer.length + " frames " + buffer.duration;
+        decoded.innerHTML = buffer.length + " frames " + buffer.duration + "s " + buffer.numberOfChannels + " channels";
         loopstartControl.setAttribute('max', Math.floor(songLength));
         loopendControl.setAttribute('max', Math.floor(songLength));
         error.setAttribute('hidden', 'hidden');
