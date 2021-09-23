@@ -25,6 +25,7 @@ runWithMSE(function(ms, el) {
       el.addEventListener(e, logEvent);
     });
 
+    info("MediaSource.isTypeSupported('video/webm; codecs=vp9,opus') = " + MediaSource.isTypeSupported('video/webm; codecs=vp9,opus'));
     ok(true, "Receive a sourceopen event");
     var sb = ms.addSourceBuffer("video/webm; codecs=vp9,opus");
     el.addEventListener("error", function(e) {
@@ -34,22 +35,33 @@ runWithMSE(function(ms, el) {
     is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
     var promises = [];
     const buffer = await fetchWithXHR("../../mediatest/webm/Morocco_1080p60.webm");
-    var p1 = loadSegment(sb, buffer.slice(0, 722));
+    const initSegmentSize = 722;
+    const cueSegmentOffset = buffer.byteLength; //98591072;
+    var p1 = loadSegment(sb, buffer.slice(0, initSegmentSize));
     var p2 = once(el, "loadedmetadata");
     await Promise.all([p1, p2]);
-    //await loadSegment(sb, buffer.slice(722, 98591072));
     var total = 0;
     ms.duration = 1000; // to remove the thousands of durationchange events with safari
-    while (true) {
+    let offset = initSegmentSize;
+    const lengthToAdd = 1000000;
+    for (;;) {
+        let offset_end = offset + lengthToAdd;
+        if (offset_end > cueSegmentOffset)
+            offset_end = cueSegmentOffset;
         try {
-            await loadSegment(sb, buffer.slice(722, 889008)); // 5s
-            total += 889008 - 722;
+            await loadSegment(sb, buffer.slice(offset, offset_end));
         } catch(err) {
-            info("run out of room at " + el.duration + "after " + total + " bytes");
+            info("run out of room at " + sb.buffered.end(sb.buffered.length-1) + " after " + total + " bytes");
             break;
         }
-        const endRange = sb.buffered.end(sb.buffered.length-1);
-        sb.timestampOffset = endRange;
+        total += offset_end - offset;
+        offset = offset_end;
+        info(total + " bytes added");
+        if (offset_end >= cueSegmentOffset) {
+            offset = 0; // initSegmentSize;
+            const endRange = sb.buffered.end(sb.buffered.length-1);
+            sb.timestampOffset = endRange;
+        }
     }
     ms.endOfStream();
     return once(el, 'ended');
