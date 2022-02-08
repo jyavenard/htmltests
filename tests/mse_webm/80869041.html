@@ -1,0 +1,50 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: VP8 corrupted frame.</title>
+  <script type="text/javascript" src="../mediasource.js"></script>
+</head>
+<body>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+runWithMSE(function(ms, el) {
+  el.controls = true;
+  once(ms, 'sourceopen').then(function() {
+    // Log events for debugging.
+    var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                  "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                  "waiting", "pause", "durationchange", "seeking", "seeked"];
+    function logEvent(e) {
+      var v = e.target;
+      info("got " + e.type + " event");
+    }
+    events.forEach(function(e) {
+      el.addEventListener(e, logEvent);
+    });
+
+    ok(true, "Receive a sourceopen event");
+    var videosb = ms.addSourceBuffer("video/webm; codecs=vp8");
+    el.addEventListener("error", function(e) {
+      ok(false, "should not fire '" + e.type + "' event");
+      SimpleTest.finish();
+    });
+    is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
+    var promises = [];
+    let p = fetchAndLoad(videosb, 'dragon', [''], '.webm');
+    p.then(function() {
+      el.play();
+      ms.endOfStream();
+      return once(el, 'ended');
+    })
+    .then(function() {
+      ok(el.currentTime >= el.buffered.end(0), "played to the end");
+      SimpleTest.finish();
+    })
+  });
+});
+
+</script>
+</pre>
+</body>
+</html>
