@@ -1,0 +1,59 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: Bilibili stall</title>
+  <script type="text/javascript" src="mediasource.js"></script>
+</head>
+<body>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+runWithMSE(async function(ms, el) {
+    el.controls = true;
+    el.autoplay = true;
+    await once(ms, 'sourceopen');
+
+    // Log events for debugging.
+    var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                "waiting", "pause", "durationchange", "seeking", "seeked"];
+    function logEvent(e) {
+    info("got " + e.type + " event");
+    }
+
+    events.forEach(function(e) {
+    el.addEventListener(e, logEvent);
+    });
+
+    ok(true, "Receive a sourceopen event");
+    var videosb = ms.addSourceBuffer("video/mp4; codecs=hev1.1.6.L93.B0");
+    // var audiosb = ms.addSourceBuffer("video/mp4; codecs=mp4a.40.2");
+    el.addEventListener("error", function(e) {
+      ok(false, "should not fire '" + e + "' event");
+    });
+    is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
+    var promises = [];
+    promises.push(fetchAndLoad(videosb, 'bilibili/buffer-video-0x16c065a80-', ['0'], '.bin'));
+    //promises.push(fetchAndLoad(audiosb, 'bilibili/buffer-video-0x16c065d00-', ['0'], '.bin'));
+    promises.push(once(el, 'loadedmetadata'));
+    await Promise.all(promises);
+    ok(true, "got loadedmetadata event");
+
+    promises = [];
+    promises.push(fetchAndLoad(videosb, 'bilibili/buffer-video-0x16c065a80-', range(53, 55), '.bin'));
+    // promises.push(fetchAndLoad(audiosb, 'bilibili/buffer-video-0x16c065d00-', range(1, 49), '.bin'));
+    await Promise.all(promises);
+
+    el.currentTime = 230;
+    await once(el, 'seeked');
+    ok(true, "got seeked");
+
+    ms.endOfStream();
+    await Promise.all([once(ms, 'sourceended'), once(el, 'ended')]);
+    ok(true, "got sourceended and ended");
+});
+
+</script>
+</pre>
+</body>
+</html>
