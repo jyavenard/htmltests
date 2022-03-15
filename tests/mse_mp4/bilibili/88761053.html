@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>MSE: Bilibili stall</title>
-  <script type="text/javascript" src="mediasource.js"></script>
+  <script type="text/javascript" src="../mediasource.js"></script>
 </head>
 <body>
 <pre id="test">
@@ -33,15 +33,15 @@ runWithMSE(async function(ms, el) {
     });
     is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
     var promises = [];
-    promises.push(fetchAndLoad(videosb, 'bilibili/buffer-video-0x16c065a80-', ['0'], '.bin'));
-    //promises.push(fetchAndLoad(audiosb, 'bilibili/buffer-video-0x16c065d00-', ['0'], '.bin'));
+    promises.push(fetchAndLoad(videosb, 'buffer-video-0x16c065a80-', ['0'], '.bin'));
+    //promises.push(fetchAndLoad(audiosb, 'buffer-video-0x16c065d00-', ['0'], '.bin'));
     promises.push(once(el, 'loadedmetadata'));
     await Promise.all(promises);
     ok(true, "got loadedmetadata event");
 
     promises = [];
-    promises.push(fetchAndLoad(videosb, 'bilibili/buffer-video-0x16c065a80-', range(53, 55), '.bin'));
-    // promises.push(fetchAndLoad(audiosb, 'bilibili/buffer-video-0x16c065d00-', range(1, 49), '.bin'));
+    promises.push(fetchAndLoad(videosb, 'buffer-video-0x16c065a80-', range(53, 55), '.bin'));
+    // promises.push(fetchAndLoad(audiosb, 'buffer-video-0x16c065d00-', range(1, 49), '.bin'));
     await Promise.all(promises);
 
     el.currentTime = 230;
