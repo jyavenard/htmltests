@@ -26,7 +26,7 @@ runWithMSE(async function(ms, el) {
     });
 
     ok(true, "Receive a sourceopen event");
-    var videosb = ms.addSourceBuffer("video/mp4; codecs=avc1.64000d");
+    var videosb = ms.addSourceBuffer("video/mp4; codecs=hev1.1.6.L93.B0");
     var audiosb = ms.addSourceBuffer("video/mp4; codecs=mp4a.40.2");
     el.addEventListener("error", function(e) {
       ok(false, "should not fire '" + e + "' event");
