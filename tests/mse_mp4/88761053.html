@@ -47,6 +47,9 @@ runWithMSE(async function(ms, el) {
     promises.push(fetchAndLoad(videosb, 'bilibili/buffer-video-0x16c065a80-', range(1, 55), '.bin'));
     promises.push(fetchAndLoad(audiosb, 'bilibili/buffer-video-0x16c065d00-', range(1, 49), '.bin'));
     await Promise.all(promises);
+
+    el.currentTime = 230;
+    await once(el, 'seeked');
     ok(true, "got all required event");
 });
 
