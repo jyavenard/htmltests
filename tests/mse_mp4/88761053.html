@@ -50,7 +50,11 @@ runWithMSE(async function(ms, el) {
 
     el.currentTime = 230;
     await once(el, 'seeked');
-    ok(true, "got all required event");
+    ok(true, "got seeked");
+
+    ms.endOfStream();
+    await Promise.all([once(ms, 'sourceended'), once(el, 'ended')]);
+    ok(true, "got sourceended and ended");
 });
 
 </script>
