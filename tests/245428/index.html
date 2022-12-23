@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>WebM blob URL playback</title>
+</head>
+<body>
+<h1>WebM blob URL playback</h1>
+<button id="play1">Play from webm URL</button>
+<button id="play2">Play from blob URL</button>
+<button id="play3">Play from bin URL</button>
+<button id="stop">stop all playback</button>
+<script type="module">
+
+const FILENAME1 = "epicarpg.webm";
+const FILENAME2 = "epicarpg.bin";
+
+var players = [ ];
+
+function play1() {
+	const a = new Audio();
+	a.addEventListener("error", e =>
+	{
+		console.error("Audio 1 error event: ", e);
+	});
+  a.src = FILENAME1;
+  a.play();
+  players.push(a);
+}
+
+async function play2() {
+	const a = new Audio();
+	a.addEventListener("error", e =>
+	{
+		console.error("Audio 2 error event: ", e);
+	});
+	const resp = await fetch(FILENAME1);
+	const blob = await resp.blob();
+	const blobUrl = URL.createObjectURL(blob);
+	
+	a.src = blobUrl;
+	a.play();
+  players.push(a);
+}
+
+function play3() {
+	const a = new Audio();
+	a.addEventListener("error", e =>
+	{
+		console.error("Audio 3 error event: ", e);
+	});
+  a.src = FILENAME2;
+  a.play();
+  players.push(a);
+}
+
+(async () =>
+{
+	document.getElementById("play1").addEventListener("click", () =>
+	{
+		play1();
+	});
+	document.getElementById("play2").addEventListener("click", () =>
+	{
+		play2();
+	});
+	document.getElementById("play3").addEventListener("click", () =>
+	{
+		play3();
+	});
+	document.getElementById("stop").addEventListener("click", () =>
+	{
+	  players.forEach((player, i) => {
+	    player.pause();
+	    player.removeAttribute('src');
+	  });
+	  players = [ ];
+	});
+})();
+
+</script>
+</body>
+</html>
