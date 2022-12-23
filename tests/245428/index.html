@@ -7,12 +7,14 @@
 <h1>WebM blob URL playback</h1>
 <button id="play1">Play from webm URL</button>
 <button id="play2">Play from blob URL</button>
-<button id="play3">Play from bin URL</button>
+<button id="play3">Play webm from bin URL</button>
+<button id="play4">Play mp4 from bin URL</button>
 <button id="stop">stop all playback</button>
 <script type="module">
 
 const FILENAME1 = "epicarpg.webm";
 const FILENAME2 = "epicarpg.bin";
+const FILENAME3 = "../../mediatest/mp4/mp4.bin"
 
 var players = [ ];
 
@@ -53,6 +55,21 @@ function play3() {
   players.push(a);
 }
 
+async function play4() {
+	const a = new Audio();
+	a.addEventListener("error", e =>
+	{
+		console.error("Audio 2 error event: ", e);
+	});
+	const resp = await fetch(FILENAME1);
+	const blob = await resp.blob();
+	const blobUrl = URL.createObjectURL(blob);
+	
+	a.src = blobUrl;
+	a.play();
+  players.push(a);
+}
+
 (async () =>
 {
 	document.getElementById("play1").addEventListener("click", () =>
@@ -66,6 +83,10 @@ function play3() {
 	document.getElementById("play3").addEventListener("click", () =>
 	{
 		play3();
+	});
+	document.getElementById("play4").addEventListener("click", () =>
+	{
+		play4();
 	});
 	document.getElementById("stop").addEventListener("click", () =>
 	{
