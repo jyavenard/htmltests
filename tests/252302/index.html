@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>MediaSource API Demo</title>
+</head>
+<body>
+
+<h3>Appending .mp4 video chunks using the Media Source API</h3>
+
+<section>
+</section>
+
+<script src="../mediasource.js"></script>
+
+<script>
+if (!!!window.MediaSource) {
+    info('MediaSource API is not available');
+}
+
+function runWithManagedMSE(testFunction, id = 'log') {
+  window.onload = function() {
+    var ms = new ManagedMediaSource();
+
+    var el = document.createElement("video");
+    el.src = URL.createObjectURL(ms);
+    el.preload = "auto";
+
+    document.body.appendChild(el);
+
+    var log = document.createElement("pre");
+    log.setAttribute("id", id);
+    document.body.appendChild(log);
+
+    var logger = new Logger(id);
+
+    testFunction(ms, el);
+  };
+}
+
+
+runWithMSE(async (ms, el) => {
+    // Log events for debugging.
+    var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                  "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                  "waiting", "pause", "durationchange", "seeking", "seeked"];
+    function logEvent(e) {
+      var v = e.target;
+      info("got " + e.type + " event");
+    }
+    events.forEach(function(e) {
+      el.addEventListener(e, logEvent);
+    });
+
+    await once(ms, 'sourceopen');
+    ok(true, "Receive a sourceopen event");
+    var sb = ms.addSourceBuffer('video/mp4; codecs="mp4a.40.2,avc1.4d4015"');
+    await fetchAndLoad(sb, '../../mediatest/fragmented/bipbopinit', [''], '.mp4');
+    await fetchAndLoad(sb, '../../mediatest/fragmented/bipbop', range(1, 14), '.m4s');
+});
+
+</script>
+</body>
+</html>
