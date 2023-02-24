@@ -53,7 +53,7 @@ runWithMSE(async function(ms, el) {
         info(`SourceBuffer buffered ranges grew from ${beforeBuffered} to ${afterBuffered}`);
         sourceBuffer.timestampOffset = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
     }
-    run('source.endOfStream()');
+    source.endOfStream();
     await once(source, 'sourceended');
     el.currentTime = video.duration - 1;
     await once(el, 'seeked');
