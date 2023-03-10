@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>
+      Test Creation of Huge AudioBuffer
+    </title>
+    <script type="text/javascript" src="../mediasource.js"></script>
+  </head>
+  <body>
+    <script class="testbody" type="text/javascript">
+        window.onload = function() {
+            // Set options to try to allocate a huge amount of memory in an
+            // AudioBuffer. This should fail gracefully with an error instead of
+            // crashing with an OOM error.
+
+            var log = document.createElement("pre");
+            log.setAttribute("id", "log");
+            document.body.appendChild(log);
+
+            var logger = new Logger("log");
+
+            let options = {
+                numberOfChannels: 32,
+                length: 1 << 30,
+                sampleRate: 16000
+            };
+            info("creating big AudioBuffer");
+            try {
+                new AudioBuffer(options);
+            } catch (e) {
+                info(": Threw exception " + e);
+            }
+        };
+    </script>
+</body>
+</html>
