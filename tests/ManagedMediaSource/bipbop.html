@@ -15,18 +15,10 @@
 <script src="../mediasource.js"></script>
 
 <script>
-if (!!!window.ManagedMediaSource) {
-    info('Managed MediaSource API is not available');
-}
-
 function runWithManagedMSE(testFunction, id = 'log') {
   window.onload = function() {
-    var ms = new ManagedMediaSource();
 
     var el = document.createElement("video");
-    el.src = URL.createObjectURL(ms);
-    el.preload = "auto";
-
     document.body.appendChild(el);
 
     var log = document.createElement("pre");
@@ -34,6 +26,15 @@ function runWithManagedMSE(testFunction, id = 'log') {
     document.body.appendChild(log);
 
     var logger = new Logger(id);
+
+    if (!!!window.ManagedMediaSource) {
+      info('Managed MediaSource API is not available');
+      return;
+    }
+    var ms = new ManagedMediaSource();
+
+    el.src = URL.createObjectURL(ms);
+    el.preload = "auto";
 
     testFunction(ms, el);
   };
