@@ -40,25 +40,30 @@ function runWithManagedMSE(testFunction, id = 'log') {
   };
 }
 
-
-runWithManagedMSE(async (ms, el) => {
+function logEvents(events, target) {
     // Log events for debugging.
-    var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
-                  "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
-                  "waiting", "pause", "durationchange", "seeking", "seeked"];
     function logEvent(e) {
       var v = e.target;
       info("got " + e.type + " event");
     }
     events.forEach(function(e) {
-      el.addEventListener(e, logEvent);
+      target.addEventListener(e, logEvent);
     });
+}
+
+runWithManagedMSE(async (ms, el) => {
+    // Log events for debugging.
+    logEvents(["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                  "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                  "waiting", "pause", "durationchange", "seeking", "seeked"], el);
+    logEvents(["sourceopen", "ended", "startstreaming", "endstreaming"], ms);
 
     await once(ms, 'sourceopen');
     ok(true, "Receive a sourceopen event");
     var sb = ms.addSourceBuffer('video/mp4; codecs="mp4a.40.2,avc1.4d4015"');
     await fetchAndLoad(sb, '../../mediatest/fragmented/bipbopinit', [''], '.mp4');
     await fetchAndLoad(sb, '../../mediatest/fragmented/bipbop', range(1, 14), '.m4s');
+    ms.endOfStream();
 });
 
 </script>
