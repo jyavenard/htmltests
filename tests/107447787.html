@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BipBop</title>
+</head>
+<body>
+<video controls id="v" width="320" height="240" src="../mediatest/mp4/bipbop_1080p_stereo.mp4" autoplay loop inline>
+</video>
+<div id="canplay"></div>
+<script>
+var v = document.getElementById("v");
+const containers = [ "video/mp4", "video/webm" ];
+  const codecs = [ "avc1.42E01E", "vp9", "av1", "opus", "vorbis", "vp8" ]
+let html = "";
+for (let container of containers) {
+  for (let codec of codecs) {
+    let mimeType = container + '; codecs="' + codec + '"'
+    let canplay = v.canPlayType(mimeType);
+    html += 'v.canPlayType("' + mimeType + ') = ' + canplay + "<br/>";
+  }
+}
+for (let container of containers) {
+  for (let codec of codecs) {
+    let mimeType = container + '; codecs="' + codec + '"'
+    let canplay = MediaSource.isTypeSupported(mimeType);
+    html += 'MediaSource.isTypeSupported("' + mimeType + ') = ' + canplay + "<br/>";
+  }
+}
+
+document.getElementById("canplay").innerHTML = html;
+</script>
+</body>
+</html>
