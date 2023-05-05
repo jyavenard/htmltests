@@ -1,0 +1,37 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: test page</title>
+  <script type="text/javascript" src="mediasource.js"></script>
+  <script>
+        function toggleFullScreen(element) {
+            if (!element.fullscreenElement)
+                element.requestFullscreen();
+            else if (document.exitFullscreen)
+                document.exitFullscreen();
+        }
+
+        async function loadData(sb) {
+            await fetchAndLoad(sb, '../../mediatest/fragmented/bipbopinit', [''], '.mp4');
+            return fetchAndLoad(sb, '../../mediatest/fragmented/bipbop', range(1, 13), '.m4s');
+        }
+
+        runWithMSE(async function(source, video) {
+            video.controls = true;
+
+            var button = document.createElement("BUTTON");
+            button.innerText = "Fullscreen";
+            document.body.appendChild(button);
+            button.onclick = toggleFullScreen.bind(null, video);
+
+            await once(source, 'sourceopen');
+            var videosb = source.addSourceBuffer('video/mp4; codecs="mp4a.40.2,avc1.4d4015"');
+            await loadData(videosb);
+            source.endOfStream();
+            await once(video, 'ended');
+            await video.play();
+        });
+    </script>
+<body>
+</body>
+</html>
