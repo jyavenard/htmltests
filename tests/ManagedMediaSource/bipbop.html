@@ -18,8 +18,11 @@
 function runWithManagedMSE(testFunction, id = 'log') {
   window.onload = function() {
 
-    var el = document.createElement("video");
-    document.body.appendChild(el);
+    var video = document.createElement("video");
+    // Show default video controls.
+    video.controls = true;
+
+    document.body.appendChild(video);
 
     var log = document.createElement("pre");
     log.setAttribute("id", id);
@@ -31,12 +34,24 @@ function runWithManagedMSE(testFunction, id = 'log') {
       info('Managed MediaSource API is not available');
       return;
     }
-    var ms = new ManagedMediaSource();
+    var source = new ManagedMediaSource();
 
-    el.src = URL.createObjectURL(ms);
-    el.preload = "auto";
+    // Set multiple child in source attibute
+    const videoSource1 = document.createElement('source');
+    videoSource1.type = 'video/mp4' ;
+    videoSource1.src = URL.createObjectURL(source);
+    video.appendChild(videoSource1) ;
 
-    testFunction(ms, el);
+    // Either set an AirPlay alternative as a 2nd source
+    // const videoSource2 = document.createElement('source');
+    // videoSource2. type = 'application/x-mpegURL' ;
+    // videoSource2.src = "http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8";
+    // video.appendChild(videoSource2);
+
+    // Or explicitly disable the Remote Playback API
+    video.disableRemotePlayback = true;
+
+    testFunction(source, video);
   };
 }
 
