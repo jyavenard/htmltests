@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>Simple MediaSource in Workers Demo</title>
+  <link rel="stylesheet" href="mse-in-workers-demo.css">
+  <script src="mse-in-workers-util.js"></script>
+  <script src="mse-in-workers-demo.js"></script>
+</head>
+<body>
+  <b>MSE-in-Workers Demo</b>
+  <div class="tldr-instructions">
+    <p>Use the button, below, to get started.
+    <p>Demo details are at the <a href="#detailed-description">bottom of this page</a>.
+    <div><b class="supported-status"></b></div>
+    <div class="tldr-if-unsupported">
+     <p>This demo requires a browser which supports MSE-in-Workers.
+     <p>Known-working browsers:
+     <ul>
+       <li>Chrome has MSE-in-Workers enabled by default beginning with version 108.0.5334.0.</li>
+       <li>Chrome 105.0.5180.0 through 108.0.5333.0: enable this feature by
+         starting with cmdline option
+         <b>--enable-blink-features=MediaSourceInWorkers,MediaSourceInWorkersUsingHandle</b>
+         or with chrome://flags/#enable-experimental-web-platform-features enabled.</li>
+       <li>Note: previous Chrome versions supported MSE-in-Workers
+         experimentally using object URL for worker MediaSource attachment, not
+         a MediaSourceHandle, but this demo has been updated to only work using
+         MediaSourceHandle.</li>
+     </ul>
+    </div>
+  </div>
+  <button class="start-stop"></button>
+  <div class="top">Loading</div>
+  <div class="parameters">
+    <table>
+      <tr>
+        <td colspan=2><b>Demo parameters (Applied when "Start Demo" button is clicked)</b></td>
+      </tr>
+      <tr>
+        <td>Media URL (to fetch completely, then append in chunks) :</td>
+        <td class="media-url"></td>
+      </tr>
+      <tr>
+        <td>Media type :</td>
+        <td class="media-type"></td>
+      </tr>
+      <tr>
+        <td>Chunk append size :</td>
+        <td class="radios">
+          <div>
+            <label><input type="radio" name="append-size" class="append-4096" value="4096">4096 bytes</label>
+            <label><input type="radio" name="append-size" class="append-2048" value="2048">2048 bytes</label>
+            <label><input type="radio" name="append-size" class="append-1024" value="1024">1024 bytes</label>
+            <label><input type="radio" name="append-size" class="append-512" value="512">512 bytes</label>
+            <label><input type="radio" name="append-size" class="append-256" value="256">256 bytes</label>
+            <label><input type="radio" name="append-size" class="append-1" value="1">1 byte</label>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td>Busy-wait duration (milliseconds) :</td>
+        <td class="radios">
+          <div>
+            <label><input type="radio" name="busywait-duration" class="busywait-50" value="50">50ms</label>
+            <label><input type="radio" name="busywait-duration" class="busywait-100" value="100">100ms</label>
+            <label><input type="radio" name="busywait-duration" class="busywait-200" value="200">200ms</label>
+            <label><input type="radio" name="busywait-duration" class="busywait-400" value="400">400ms</label>
+            <label><input type="radio" name="busywait-duration" class="busywait-800" value="800">800ms</label>
+            <label><input type="radio" name="busywait-duration" class="busywait-1600" value="1600">1600ms</label>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+  <div class="players">
+    <div class="main">
+      <br><hr><b>MSE usage on main thread</b>
+      <div class="player"></div>
+    </div>
+    <div class="worker">
+      <br><hr><b>MSE usage in worker thread (video element remains on main thread)</b>
+      <div class="player"></div>
+    </div>
+  </div>
+  <div class="description">
+    <hr>
+    <a name="detailed-description"></a>
+    <p>
+    <b>Demo details</b>
+    <p>This is a demo of how usage of Media Source Extensions API from a
+    dedicated worker context can avoid "buffering jank" when the main window
+    context is very busy, even though the media element playing the buffered
+    media is still on that main thread.
+    <p>This demo presents a side-by-side comparison of two players, one
+    fetching and buffering to its media element solely on the main window
+    context, and the other player relying on a dynamically created dedicated
+    worker to fetch and buffer the same media into a MediaSource owned by that
+    worker's context, attached to the main window context's media element via a
+    transferred-to-main MediaSourceHandle object set on the media element's
+    srcObject attribute.
+    <p>A scenario where the main thread is under heavy contention is achieved
+    by frequently busy-waiting on it while both players are fetching, buffering
+    and playing. Furthermore, asynchronous appendBuffer operations are
+    performed (on each of the main and worker MSE demos) in small chunks to
+    enable rapid appearance of "buffering jank" on the player being buffered
+    via MSE on the main thread versus a much better experience on the player
+    being buffered via MSE on the worker thread, even if the media stream is
+    short.
+    <p>In practice, main thread (aka Window context) contention can result from
+    many sources, though commonly it is from complex and frequent task
+    execution demands made by the application on the Window execution context,
+    and is made worse when the platform has less execution capacity available.
+    The DOM and associated application javascript operate in the Window
+    execution context. DedicatedWorkers run in a concurrent execution context
+    with respect to the Window execution context. Even with concurrent
+    buffering and smoother playback by using MSE on a dedicated worker context,
+    observe that the video element for the MSE-in-Worker player can still have
+    poor controls response time when the Window context is under high
+    contention. This is because that element (and its controls) can only
+    execute on the Window context and their event handlers can have high
+    scheduling latency.
+    <p>To try in Chrome, use 105.0.5180.0 or greater (earlier versions since
+    88.0.4300.0 experimentally supported worker MediaSource attachment using
+    legacy object URLs, but that functionality has been removed from both the
+    implementation and specification).
+    <ul>
+      <li>Chrome has MSE-in-Workers enabled by default beginning with version
+        108.0.5334.0.</li>
+      <li>Chrome 105.0.5180.0 through 108.0.5333.0: enable this feature by
+        starting with cmdline option
+        <b>--enable-blink-features=MediaSourceInWorkers,MediaSourceInWorkersUsingHandle</b>
+      (preferred way) or with
+      chrome://flags/#enable-experimental-web-platform-features enabled.</li>
+    </ul></p>
+    <p>If the main thread MSE buffering playback is too slow (it might take a
+    long while to render even the first frame on some machines), reduce the
+    amount of contention on the main thread by stopping the demo, selecting a
+    smaller busy-wait duration (to handle other main thread tasks more
+    frequently) or a larger append-size (to do more real buffering work when
+    scheduled), and restarting the demo.
+    <p>See <a href="https://github.com/wolenetz/mse-in-workers-demo/">the
+      demo's github page for more information.</a>
+  </div>
+</body>
