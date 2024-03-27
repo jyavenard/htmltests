@@ -1,0 +1,56 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: basic functionality</title>
+  <script type="text/javascript" src="../../mediasource.js"></script>
+  <script type="text/javascript" src="../../media-source-loader.js"></script>
+</head>
+<body>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+function loaderPromise(loader) {
+  return new Promise((resolve, reject) => {
+    loader.onload = resolve;
+    loader.onerror = reject;
+  });
+}
+
+runWithMSE(async function(source, el) {
+  el.controls = true;
+  el.autoplay = true;
+  el.muted = true;
+  
+  await once(source, 'sourceopen')
+  // Log events for debugging.
+  var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                "waiting", "pause", "durationchange", "seeking", "seeked"];
+  function logEvent(e) {
+    info("got " + e.type + " event");
+  }
+  events.forEach(function(e) {
+    el.addEventListener(e, logEvent);
+  });
+
+  ok(true, "Receive a sourceopen event");
+
+  loader = new MediaSourceLoader('test-fragmented-manifest.json');
+  await loaderPromise(loader);
+
+  el.addEventListener("error", function(e) {
+    ok(false, "should not fire '" + e + "' event");
+  });
+  is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
+  source.duration = 10;
+  var sourceBuffer = source.addSourceBuffer(loader.type());
+  await loadSegment(sourceBuffer, loader.initSegment());
+  await loadSegment(sourceBuffer, loader.mediaSegment(0));
+  await loadSegment(sourceBuffer, loader.mediaSegment(0));
+  ok(true, "got all required event");
+});
+
+</script>
+</pre>
+</body>
+</html>
