@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head></head>
+<body>
+  <script src="common.js"></script>  
+  <script>
+    window.onload = async function() {
+      var v = document.getElementById("v");
+      v.src = "../mediatest/mp4/bruce_vs_ironman.mp4";
+      await once(v, 'canplay');
+      v.currentTime = v.duration - 1;
+      await once(v, 'seeked');
+      v.play();
+      await once(v, 'ended');
+      document.getElementById("canplay").innerHTML = 'v.ended:' + v.ended + " v.currentTime:" + v.currentTime +' v.played:' + timeRangeToString(v.played);
+    };
+  </script>
+  <video id="v" controls muted>
+  </video>
+  <div id="canplay">running</div>
+</body>
+</html>
