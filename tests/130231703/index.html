@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <title>rdar://130231703</title>
+    <link rel="stylesheet" href="bootstrap.min.css">
+    <link rel="stylesheet" href="styles.min.css">
+
+<meta name="description" content="Sample test for rdar://130231703">
+</head>
+<script>
+async function setUpVideoStream(){
+  // Specific video format and codec
+//   const mediaType = 'video/webm; codecs="vp9,opus"';
+  const mediaType = 'video/mp4; codecs="mp4a.40.2,avc1.4d4015"';
+
+  // Check if the type of video format / codect is supported.
+  if (!ManagedMediaSource.isTypeSupported(mediaType)) {
+    return; // Not supported, do something else.
+  }
+
+  // Set up video and its managed source.
+  const video = document.getElementById("msevideo");
+  const source = new ManagedMediaSource();
+
+  await new Promise((resolve) => {
+    // Set multiple child in source attibute
+    const videoSource1 = document.createElement('source');
+    videoSource1.type = 'video/mp4' ;
+    videoSource1.src = URL.createObjectURL(source);
+    video.appendChild(videoSource1) ;
+    // Or explicitly disable the Remote Playback API
+    video.disableRemotePlayback = true;
+
+    source.addEventListener("sourceopen", resolve, { once: true });
+  });
+
+  const sourceBuffer = source.addSourceBuffer(mediaType);
+
+  // Set up the event handlers
+  sourceBuffer.onbufferedchange = (e) => {
+    console.log("onbufferedchange event fired.");
+    console.log(`Added Ranges: [${timeRangesToString(e.addedRanges)}]`);
+    console.log(`Removed Ranges: [${timeRangesToString(e.removedRanges)}]`);
+  };
+
+  source.onstartstreaming = async () => {
+    const response = await fetch("../../mediatest/mp4/bruce_vs_ironman.mp4");
+    const buffer = await response.arrayBuffer();
+    await new Promise((resolve) => {
+      sourceBuffer.addEventListener("updateend", resolve, { once: true });
+      sourceBuffer.appendBuffer(buffer);
+    });
+  };
+}
+
+// Helper function...
+function timeRangesToString(timeRanges) {
+  const ranges = [];
+  for (let i = 0; i < timeRanges?.length; i++) {
+    const range = [timeRanges.start(i), timeRanges.end(i)];
+    ranges.push(range);
+  }
+  return ranges.toString();
+}
+    
+</script>
+<body onload="setUpVideoStream()">
+    <main class="page blog-post-list">
+        <section class="clean-block clean-blog-list dark">
+            <div class="container">
+                <div class="block-heading">
+                    <h1 class="text-info">Test cases for rdar://130231703</h1>
+                </div>
+                <div class="block-content">
+                    <div class="items">
+                        <div>
+                            <div class="row justify-content-center align-items-center">
+                                <div class="col-md-3">
+                                    <div class="product-image text-center"><video src="sample-5s.webm" class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none"></div>
+                                </div>
+                                <div class="col-md-5 product-info" style="border-style: none;">
+                                    <div class="product-specs">
+                                        <div><span class="value" style="text-align: justify;">WebM with no poster</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="row justify-content-center align-items-center">
+                                <div class="col-md-3">
+                                    <div class="product-image text-center"><video src="sample-5s.webm" class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none" poster="sample-5s.jpg"></div>
+                                </div>
+                                <div class="col-md-5 product-info" style="border-style: none;">
+                                    <div class="product-specs">
+                                        <div><span class="value" style="text-align: justify;">WebM with poster</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="row justify-content-center align-items-center">
+                                <div class="col-md-3">
+                                    <div class="product-image text-center"><video src="../../mediatest/mp4/bruce_vs_ironman.mp4" class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none" poster="sample-5s.jpg"></div>
+                                </div>
+                                <div class="col-md-5 product-info" style="border-style: none;">
+                                    <div class="product-specs">
+                                        <div><span class="value" style="text-align: justify;">MP4 with poster</span></div>
+                                    </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="row justify-content-center align-items-center">
+                                <div class="col-md-3">
+                                    <div class="product-image text-center">
+                                        <video id="msevideo" class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none" poster="sample-5s.jpg">
+                                        </video>
+                                    </div>
+                                </div>
+                                <div class="col-md-5 product-info" style="border-style: none;">
+                                    <div class="product-specs">
+                                        <div><span class="value" style="text-align: justify;">MSE video with poster</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+
+</html>
