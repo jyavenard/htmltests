@@ -65,7 +65,7 @@ function timeRangesToString(timeRanges) {
   }
   return ranges.toString();
 }
-    
+
 </script>
 <body onload="setUpVideoStream()">
     <main class="page blog-post-list">
@@ -115,7 +115,7 @@ function timeRangesToString(timeRanges) {
                             <div class="row justify-content-center align-items-center">
                                 <div class="col-md-3">
                                     <div class="product-image text-center">
-                                        <video id="msevideo" class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none" poster="sample-5s.jpg">
+                                        <video id=msevideo class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none" poster="sample-5s.jpg">
                                         </video>
                                     </div>
                                 </div>
@@ -126,11 +126,30 @@ function timeRangesToString(timeRanges) {
                                 </div>
                             </div>
                         </div>
+                        <div>
+                            <div class="row justify-content-center align-items-center">
+                                <div class="col-md-3">
+                                    <div class="product-image text-center">
+                                        <video id=mediastreamvideo class="video-thumbnail" controls disablePictureInPicture controlsList="nodownload" preload="none" poster="sample-5s.jpg"</video>
+                                    </div>
+                                </div>
+                                <div class="col-md-5 product-info" style="border-style: none;">
+                                    <div class="product-specs">
+                                        <div><span class="value" style="text-align: justify;">MediaStream with poster</span></div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-2 quantity" style="text-align: center;"><button id=b>Play</button></a></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
     </main>
 </body>
-
+<script>
+    b.onclick = async () => {
+        mediastreamvideo.srcObject = await navigator.mediaDevices.getUserMedia({video:true});
+    }
+</script>
 </html>
