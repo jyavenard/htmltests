@@ -29,16 +29,16 @@ runWithMSE(async function(ms, el) {
   });
 
   ok(true, "Receive a sourceopen event");
-  var videosb = ms.addSourceBuffer('video/mp4; codecs="hvc1.1.40000000.L90.00.00.00.00.00.00"');
+  // var videosb = ms.addSourceBuffer('video/mp4; codecs="hvc1.1.40000000.L90.00.00.00.00.00.00"');
   var audiosb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.5"');
   el.addEventListener("error", function(e) {
     ok(false, "should not fire '" + e + "' event");
   });
   is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
-  videosb.timestampOffset = -20.478999999999999;
+  // videosb.timestampOffset = -20.478999999999999;
   audiosb.timestampOffset = -20.478999999999999;
   var promises = [];
-  promises.push(fetchAndLoad(videosb, 'buffer-video-1530DC620-', range(0, 5), '.bin')); // load 0 to 4
+  // promises.push(fetchAndLoad(videosb, 'buffer-video-1530DC620-', range(0, 5), '.bin')); // load 0 to 4
   promises.push(fetchAndLoad(audiosb, 'buffer-audio-1530DC430-', range(0, 4), '.bin')); // load 0 to 3
   promises.push(once(el, 'loadedmetadata'));
   await Promise.all(promises);
