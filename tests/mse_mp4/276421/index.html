@@ -1,0 +1,55 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>MSE: test for webkit.org/b/276421</title>
+  <script type="text/javascript" src="../mediasource.js"></script>
+</head>
+<body>
+<pre id="test">
+<script class="testbody" type="text/javascript">
+
+// This test checks that readyState is properly set and the appropriate events are being fired accordingly:
+// 1. Ensure that play/playing aren't fired before any media data been added.
+// 2. Load more than 10s of data and ensure that canplay, play and playing events are fired.
+
+runWithMSE(async function(ms, el) {
+  el.controls = true;
+  el.autoplay = true;
+  await once(ms, 'sourceopen');
+  
+  // Log events for debugging.
+  var events = ["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                "waiting", "pause", "durationchange", "seeking", "seeked"];
+  function logEvent(e) {
+    info("got " + e.type + " event");
+  }
+  events.forEach(function(e) {
+    el.addEventListener(e, logEvent);
+  });
+
+  ok(true, "Receive a sourceopen event");
+  var videosb = ms.addSourceBuffer('video/mp4; codecs="hvc1.1.40000000.L90.00.00.00.00.00.00"');
+  var audiosb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.5"');
+  el.addEventListener("error", function(e) {
+    ok(false, "should not fire '" + e + "' event");
+  });
+  is(el.readyState, el.HAVE_NOTHING, "readyState is HAVE_NOTHING");
+  videosb.timestampOffset = -20.478999999999999;
+  audiosb.timestampOffset = -20.478999999999999;
+  var promises = [];
+  promises.push(fetchAndLoad(videosb, 'buffer-video-1530DC620-', range(0, 5), '.bin')); // load 0 to 4
+  promises.push(fetchAndLoad(audiosb, 'buffer-audio-1530DC430-', range(0, 4), '.bin')); // load 0 to 3
+  promises.push(once(el, 'loadedmetadata'));
+  await Promise.all(promises);
+  ok(true, "got all required event");
+  audiosb.remove(0, 49.152000000000001);
+  await once(audiosb, 'updateend');
+  fetchAndLoad(audiosb, 'buffer-audio-1530DC430-', range(4, 8), '.bin');
+  ok(true, "loaded extra audio");
+});
+
+</script>
+</pre>
+</body>
+</html>
