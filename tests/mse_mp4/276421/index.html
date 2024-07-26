@@ -43,8 +43,10 @@ runWithMSE(async function(ms, el) {
   promises.push(once(el, 'loadedmetadata'));
   await Promise.all(promises);
   ok(true, "got all required event");
+  info(`remove content, before: ${timeRangeToString(audiosb.buffered)}`);
   audiosb.remove(0, 49.152000000000001);
-  await once(audiosb, 'updateend');
+  await once(audiosb, 'update');
+  info(`remove content, after: ${timeRangeToString(audiosb.buffered)}`);
   fetchAndLoad(audiosb, 'buffer-audio-1530DC430-', range(4, 8), '.bin');
   ok(true, "loaded extra audio");
 });
