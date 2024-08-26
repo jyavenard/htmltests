@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head></head>
+<body>
+  <script src="../common.js"></script>  
+  <script>
+    window.onload = async function() {
+      var v = document.getElementById("v");
+      v.src = "video/1fc5d8f1aeed308c3610ad8160f7a25e.mp4";
+      await once(v, 'canplay');
+      v.play();
+      await once(v, 'ended');
+      document.getElementById("canplay").innerHTML = 'v.ended:' + v.ended + " v.currentTime:" + v.currentTime +' v.played:' + timeRangeToString(v.played);
+    };
+  </script>
+  <video id="v" controls muted playsinline>
+  </video>
+  <div id="canplay">running</div>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head></head>
+<body>
+  <script src="../common.js"></script>  
+  <script>
+    let getArrayBuffer = async (file) => {
+        return fetch(file, {
+            method: 'GET',
+            responseType: 'arrayBuffer'
+        });
+    }
+    let getBlobVideoURL = async (file) => {
+        let video = await getArrayBuffer(file);
+        let foo = await video.arrayBuffer()
+        console.log('arraybuffer', foo);
+        let videoBlob = new Blob([foo], { type: 'video/mp4' });
+        return window.URL.createObjectURL(videoBlob)
+    }
+    window.onload = async function() {
+        var v = document.getElementById("v");
+        v.addEventListener('error', function(event) {
+            document.getElementById("canplay").innerHTML = `Error loading video: ${event.message}`;
+        });
+        v.src = await getBlobVideoURL("video/1fc5d8f1aeed308c3610ad8160f7a25e.mp4");
+        await once(v, 'canplay');
+        v.play();
+        await once(v, 'ended');
+        document.getElementById("canplay").innerHTML = 'v.ended:' + v.ended + " v.currentTime:" + v.currentTime +' v.played:' + timeRangeToString(v.played);
+    };
+  </script>
+  <video id="v" controls muted playsinline>
+  </video>
+  <div id="canplay">running</div>
+</body>
+</html>
