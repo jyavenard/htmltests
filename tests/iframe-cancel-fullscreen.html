@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<button onclick="document.documentElement.requestFullscreen();">Request fullscreen</button><br>
+<iframe id="iframe"></iframe>
+<script>
+    iframe.srcdoc = `<!DOCTYPE html>
+
+<button onclick="document.webkitCancelFullScreen();parent.iframe.remove();">Cancel fullscreen</button>
+`
+</script>

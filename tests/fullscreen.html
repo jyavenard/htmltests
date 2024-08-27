@@ -1,0 +1,71 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <style>
+        .block {
+  display: block;
+  width: 100%;
+  height: 25%;
+  border: none;
+  background-color: #04AA6D;
+  padding: 14px 28px;
+  font-size: 16px;
+  cursor: pointer;
+  text-align: center;
+}
+    </style>
+  <title>Fullscreen: test page</title>
+  <script>
+        async function toggleFullScreen(element) {
+            var mode = element.webkitPresentationMode;
+            if (!element.fullscreenElement) {
+                if (!!element.requestFullscreen)
+                    await element.requestFullscreen();
+                else if (!!element.webkitEnterFullscreen)
+                    element.webkitEnterFullscreen();
+                element.src = "../mediatest/mp4/bruce_vs_ironman.mp4";
+                element.onloadedmetadata = () => {
+                    element.play();
+                }
+            }
+            else if (document.exitFullscreen)
+                document.exitFullscreen();
+        }
+
+        window.onload = async function() {
+            const id = 'log';
+
+            // var video = document.getElementById("video");
+            video.src = "../mediatest/mp4/bruce_vs_ironman.mp4";
+            video.preload = "auto";
+            video.muted = true;
+
+            video.controls = true;
+
+            var button1 = document.createElement("BUTTON");
+            button1.innerText = "Video Fullscreen";
+            document.body.appendChild(button1);
+            button1.onclick = toggleFullScreen.bind(null, video);
+
+            var div = document.getElementById("videodiv");
+            var button2 = document.createElement("BUTTON");
+            button2.innerText = "Div Fullscreen";
+            document.body.appendChild(button2);
+            button2.onclick = toggleFullScreen.bind(null, div);
+
+            // var log = document.createElement("pre");
+            // log.setAttribute("id", id);
+            // document.body.appendChild(log);
+            // var logger = new Logger(id);
+
+            var button3 = document.getElementById("button3");
+            button3.onclick = toggleFullScreen.bind(null, video);
+        };
+    </script>
+<body>
+    <div id="videodiv" style="width: 320px; height: 240px">
+        <video id='video' style="object-fit: cover;" width="100%" height="100%" muted fullscreen></video>
+    </div>
+    <button id="button3" class="block">Fullscreen Button</button>
+</body>
+</html>
