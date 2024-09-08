@@ -50,7 +50,7 @@
             source.addEventListener("sourceopen", resolve, { once: true });
         });
         var sourceBuffer = source.addSourceBuffer('video/mp4; codecs="hev1.1.6.L93.B0,avc1.4d4015"');
-        const response = await fetch("../../mediatest/mp4/spatial/cat.mp4");
+        const response = await fetch("../../mediatest/mp4/spatial/trees.mp4");
         const buffer = await response.arrayBuffer();
         const initSegment = buffer.slice(0, 3723);
         const mediaSegment = buffer.slice(3723);
