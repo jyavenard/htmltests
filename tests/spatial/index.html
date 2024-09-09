@@ -107,11 +107,16 @@
         
         const segment = await fetchSegment(manifest.url, manifest.init);
         await loadSegment(sourceBuffer, segment);
-       
-        var rv = Promise.resolve();
-        manifest.media.forEach(async segmentManifest => {
-            rv = rv.then(() => fetchSegment(manifest.url, segmentManifest)).then(buffer => loadSegment(sourceBuffer, buffer));
+        
+        const fetchPromises = manifest.media.map(async (segment, index) => {
+            return fetchSegment(manifest.url, segment);
         });
+        for (var i = 0; i < fetchPromises.length; i++) {
+            await Promise.all(fetchPromises.slice(0, i - 1));
+            const data = await fetchPromises[i];
+            await loadSegment(sourceBuffer, data);
+        }        
+
         source.endOfStream();
     }
     </script>
