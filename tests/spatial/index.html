@@ -15,6 +15,60 @@
             document.exitFullscreen();
     }
 
+    const manifest = {
+        "url":"../../mediatest/mp4/spatial/trees.mp4","type":"video/mp4; codecs=\"hvc1.1.6.L123.b0,mp4a.40.2\"",
+        "init":{"offset":0,"size":1939},
+        "media":[
+            {"offset":1939,"size":4503911,"timestamp":0,"duration":0.8333333333333334},
+            {"offset":4505850,"size":18529,"timestamp":0,"duration":61.44},
+            {"offset":4524379,"size":160,"timestamp":0,"duration":15.173333333333334},
+            {"offset":4524539,"size":4670675,"timestamp":0.8333333333333334,"duration":0.9333333333333333},
+            {"offset":9195214,"size":21345,"timestamp":61.44,"duration":68.26666666666667},
+            {"offset":9216559,"size":5041799,"timestamp":1.7666666666666666,"duration":0.9333333333333333},
+            {"offset":14258358,"size":21593,"timestamp":129.70666666666668,"duration":68.26666666666667},
+            {"offset":14279951,"size":5171369,"timestamp":2.7,"duration":0.9333333333333333},
+            {"offset":19451320,"size":21590,"timestamp":197.97333333333333,"duration":68.26666666666667},
+            {"offset":19472910,"size":5351088,"timestamp":3.6333333333333333,"duration":0.9333333333333333},
+            {"offset":24823998,"size":22270,"timestamp":266.24,"duration":69.97333333333333},
+            {"offset":24846268,"size":10568845,"timestamp":4.566666666666666,"duration":1.8666666666666667},
+            {"offset":35415113,"size":43831,"timestamp":336.2133333333333,"duration":136.53333333333333},
+            {"offset":35458944,"size":5353900,"timestamp":6.433333333333334,"duration":0.9333333333333333},
+            {"offset":40812844,"size":21993,"timestamp":472.74666666666667,"duration":68.26666666666667},
+            {"offset":40834837,"size":5432252,"timestamp":7.366666666666666,"duration":0.9333333333333333},
+            {"offset":46267089,"size":22255,"timestamp":541.0133333333333,"duration":68.26666666666667},
+            {"offset":46289344,"size":5402034,"timestamp":8.3,"duration":0.935},
+            {"offset":51691378,"size":22641,"timestamp":609.28,"duration":69.97333333333333},
+            {"offset":51714019,"size":5500858,"timestamp":9.235,"duration":0.9333333333333333},
+            {"offset":57214877,"size":22485,"timestamp":679.2533333333333,"duration":68.26666666666667},
+            {"offset":57237362,"size":5526235,"timestamp":10.168333333333333,"duration":0.9333333333333333},
+            {"offset":62763597,"size":22577,"timestamp":747.52,"duration":68.26666666666667},
+            {"offset":62786174,"size":5439709,"timestamp":11.101666666666667,"duration":0.9333333333333333},
+            {"offset":68225883,"size":22387,"timestamp":815.7866666666666,"duration":68.26666666666667},
+            {"offset":68248270,"size":5151071,"timestamp":12.035,"duration":0.9333333333333333},
+            {"offset":73399341,"size":22132,"timestamp":884.0533333333333,"duration":68.26666666666667},
+            {"offset":73421473,"size":4687871,"timestamp":12.968333333333334,"duration":0.9333333333333333},
+            {"offset":78109344,"size":22664,"timestamp":952.32,"duration":69.97333333333333},
+            {"offset":78132008,"size":4543921,"timestamp":13.901666666666667,"duration":0.9333333333333333},
+            {"offset":82675929,"size":22145,"timestamp":1022.2933333333333,"duration":68.26666666666667},
+            {"offset":82698074,"size":1992456,"timestamp":14.835,"duration":0.37166666666666665},
+            {"offset":84690530,"size":9094,"timestamp":1090.56,"duration":27.30666666666667}
+        ]
+    };
+
+    async function fetchSegment(url, segmentManifest) {
+        let request = new Request(url);
+        request.headers.append("Range", `bytes=${segmentManifest.offset}-${segmentManifest.offset + segmentManifest.size - 1}`);
+        const response = await fetch(request);
+        return response.arrayBuffer();
+    }
+
+    async function loadSegment(sourceBuffer, segment) {
+        return new Promise((resolve) => {
+            sourceBuffer.addEventListener("updateend", resolve, { once: true });
+            sourceBuffer.appendBuffer(segment);
+        });
+    }
+
     window.onload = async function() {
         const id = 'log';
 
@@ -49,18 +103,14 @@
             video2.src = URL.createObjectURL(source);
             source.addEventListener("sourceopen", resolve, { once: true });
         });
-        var sourceBuffer = source.addSourceBuffer('video/mp4; codecs="hev1.1.6.L93.B0,avc1.4d4015"');
-        const response = await fetch("../../mediatest/mp4/spatial/trees.mp4");
-        const buffer = await response.arrayBuffer();
-        const initSegment = buffer.slice(0, 3723);
-        const mediaSegment = buffer.slice(3723);
-        await new Promise((resolve) => {
-            sourceBuffer.addEventListener("updateend", resolve, { once: true });
-            sourceBuffer.appendBuffer(initSegment);
-        });
-        await new Promise((resolve) => {
-            sourceBuffer.addEventListener("updateend", resolve, { once: true });
-            sourceBuffer.appendBuffer(mediaSegment);
+        var sourceBuffer = source.addSourceBuffer(manifest.type);
+        
+        const segment = await fetchSegment(manifest.url, manifest.init);
+        await loadSegment(sourceBuffer, segment);
+       
+        var rv = Promise.resolve();
+        manifest.media.forEach(async segmentManifest => {
+            rv = rv.then(() => fetchSegment(manifest.url, segmentManifest)).then(buffer => loadSegment(sourceBuffer, buffer));
         });
         source.endOfStream();
     }
