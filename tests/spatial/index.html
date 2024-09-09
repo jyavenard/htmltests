@@ -95,6 +95,11 @@
         mse.appendChild(button4);
         button4.onclick = toggleFullScreen.bind(null, videodiv2);
 
+        console.time("video1");
+        console.time("video2");
+        video1.onloadeddata = () => console.timeEnd("video1");
+        video2.onloadeddata = () => console.timeEnd("video2");
+
         if (!!!window.ManagedMediaSource)
             return;
         video2.disableRemotePlayback = true;
@@ -104,10 +109,10 @@
             source.addEventListener("sourceopen", resolve, { once: true });
         });
         var sourceBuffer = source.addSourceBuffer(manifest.type);
-        
+
         const segment = await fetchSegment(manifest.url, manifest.init);
         await loadSegment(sourceBuffer, segment);
-        
+
         const fetchPromises = manifest.media.map(async (segment, index) => {
             return fetchSegment(manifest.url, segment);
         });
