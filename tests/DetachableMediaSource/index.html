@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <title>Managed MediaSource API Demo with detachable MediaSource</title>
+</head>
+<body>
+
+<h3>Detachable MediaSource</h3>
+
+<section>
+</section>
+
+<script src="../mediasource.js"></script>
+
+<script>
+function runWithManagedMSE(testFunction, id = 'log') {
+  window.onload = function() {
+
+    var video = document.createElement("video");
+    // Show default video controls.
+    video.controls = true;
+
+    document.body.appendChild(video);
+
+    var log = document.createElement("pre");
+    log.setAttribute("id", id);
+    document.body.appendChild(log);
+
+    var logger = new Logger(id);
+
+    if (!!!window.ManagedMediaSource) {
+      info('Managed MediaSource API is not available');
+      return;
+    }
+    var source = new ManagedMediaSource({ detachable: true });
+    video.srcObject = source;
+
+    // Or explicitly disable the Remote Playback API
+    video.disableRemotePlayback = true;
+
+    testFunction(source, video);
+  };
+}
+
+function logEvents(events, target) {
+    // Log events for debugging.
+    function logEvent(e) {
+      var v = e.target;
+      info("got " + e.type + " event");
+    }
+    events.forEach(function(e) {
+      target.addEventListener(e, logEvent);
+    });
+}
+
+runWithManagedMSE(async (ms, el) => {
+    // Log events for debugging.
+    logEvents(["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
+                  "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
+                  "waiting", "pause", "durationchange", "seeking", "seeked"], el);
+    logEvents(["sourceopen", "ended", "startstreaming", "endstreaming"], ms);
+
+    await once(ms, 'sourceopen');
+    ok(true, "Receive a sourceopen event");
+    var sb = ms.addSourceBuffer('video/mp4; codecs="mp4a.40.2,avc1.4d4015"');
+    await fetchAndLoad(sb, '../../mediatest/fragmented/bipbopinit', [''], '.mp4');
+    await fetchAndLoad(sb, '../../mediatest/fragmented/bipbop', range(1, 14), '.m4s');
+    ms.endOfStream();
+    
+    info("clearing srcObject");
+    el.srcObject = null;
+    info(`new range: ${timeRangeToString(el.buffered)}`);
+    info("re-using MediaSource in srcObject");
+    el.srcObject = ms;
+    await once(ms, 'sourceopen');
+    info(`new range: ${timeRangeToString(el.buffered)}`);
+    info(`duration=${el.duration}`);
+});
+
+</script>
+</body>
+</html>
