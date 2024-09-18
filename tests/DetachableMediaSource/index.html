@@ -60,11 +60,12 @@ runWithManagedMSE(async (ms, el) => {
     logEvents(["suspend", "play", "canplay", "canplaythrough", "loadstart", "loadedmetadata",
                   "loadeddata", "playing", "ended", "error", "stalled", "emptied", "abort",
                   "waiting", "pause", "durationchange", "seeking", "seeked"], el);
-    logEvents(["sourceopen", "ended", "startstreaming", "endstreaming"], ms);
+    logEvents(["sourceopen", "sourceended", "startstreaming", "endstreaming"], ms);
 
     await once(ms, 'sourceopen');
     ok(true, "Receive a sourceopen event");
     var sb = ms.addSourceBuffer('video/mp4; codecs="mp4a.40.2,avc1.4d4015"');
+    logEvents(["bufferedchange"], sb);
     await fetchAndLoad(sb, '../../mediatest/fragmented/bipbopinit', [''], '.mp4');
     await fetchAndLoad(sb, '../../mediatest/fragmented/bipbop', range(1, 14), '.m4s');
     ms.endOfStream();
@@ -74,7 +75,7 @@ runWithManagedMSE(async (ms, el) => {
     info(`new range: ${timeRangeToString(el.buffered)}`);
     info("re-using MediaSource in srcObject");
     el.srcObject = ms;
-    await once(ms, 'sourceopen');
+    await Promise.all([ once(ms, 'sourceopen'), once(el, 'loadedmetadata')]);
     info(`new range: ${timeRangeToString(el.buffered)}`);
     info(`duration=${el.duration}`);
 });
