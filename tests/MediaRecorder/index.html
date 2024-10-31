@@ -58,8 +58,11 @@
         testWebm.onclick = () => {
             doEncode("video/webm", "webm");
         } 
+        testWebmvp8.onclick = () => {
+            doEncode("video/webm; codecs=\"vp8\"", "webm");
+        }
         testWebmvp9.onclick = () => {
-            doEncode("video/webm; codecs=\"vp9.0\"", "webm");
+            doEncode("video/webm; codecs=\"vp09\"", "webm");
         }
     }
     </script>
@@ -69,7 +72,7 @@
     <br>
     <button id=testH265>test H265</button>
     <br>
-    <button id=testWebm>test webm vp8</button><button id=testWebmvp9>test webm vp9</button>
+    <button id=testWebm>webm (default)</button><button id=testWebmvp8>webm (vp8)</button><button id=testWebmvp9>webm (vp9)</button>
 
     <br>
     <input type="checkbox" id="videocheck" checked><label for="videocheck">video</label>
