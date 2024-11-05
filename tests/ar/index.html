@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head></head>
+<body>
+<video controls id="v1" autoplay muted>
+  <source src="../../mediatest/ar/pixel_aspect_ratio.mp4.mpg" type='video/mp4' />
+</video>
+<br>
+<div id="dimensions1"></div>
+<br>
+<video controls id="v2" autoplay muted>
+  <source src="../../mediatest/ar/pixel_aspect_ratio.webm" type='video/webm' />
+</video>
+<br>
+<div id="dimensions2"></div>
+<script>
+var v1 = document.getElementById("v1");
+var v2 = document.getElementById("v2");
+v1.onloadedmetadata = () => {
+  document.getElementById("dimensions1").innerHTML += `v1.videoWidth: ${v1.videoWidth} v1.videoHeight: ${v1.videoHeight}<br/>`;
+};
+v2.onloadedmetadata = () => {
+  document.getElementById("dimensions2").innerHTML += `v2.videoWidth: ${v2.videoWidth} v2.videoHeight: ${v2.videoHeight}<br/>`;
+};
+</script>
+</body>
+</html>
