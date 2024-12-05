@@ -38,6 +38,9 @@
             log("playing video");
         };
         log("recording");
+        setTimeout(() => {
+            stream.getAudioTracks()[0].applyConstraints({sampleRate:44100})
+        }, 1500);
         await new Promise(resolve => setTimeout(resolve, 5000));
         log("stopping");
         recorder.stop();    
@@ -50,9 +53,15 @@
         testH264.onclick = () => {
             doEncode("video/mp4;codecs=avc1.42e01e", "mp4");
         }
+        testH264Opus.onclick = () => {
+            doEncode("video/mp4;codecs=avc1.42e01e,opus", "mp4");
+        }
 
         testH265.onclick = () => {
-            doEncode("video/mp4;codecs=hev1", "mp4");
+            doEncode("video/mp4;codecs=hev1.1.6.L93.B0", "mp4");
+        }
+        testAV1.onclick = () => {
+            doEncode("video/mp4;codecs=av01.0.01M.08", "mp4");
         }
 
         testWebm.onclick = () => {
@@ -64,15 +73,20 @@
         testWebmvp9.onclick = () => {
             doEncode("video/webm; codecs=\"vp09\"", "webm");
         }
+        testWebmvp92.onclick = () => {
+            doEncode("video/webm; codecs=\"vp09.02.30.10\"", "webm");
+        }
     }
     </script>
 <body>
     <h1>Media Recorder demo</h1>
-    <button id=testH264>test H264</button>
+    <button id=testH264>test H264</button>    <button id=testH264Opus>test H264 with Opus</button>
     <br>
     <button id=testH265>test H265</button>
     <br>
-    <button id=testWebm>webm (default)</button><button id=testWebmvp8>webm (vp8)</button><button id=testWebmvp9>webm (vp9)</button>
+    <button id=testAV1>test AV1</button>
+    <br>
+    <button id=testWebm>webm (default)</button><button id=testWebmvp8>webm (vp8)</button><button id=testWebmvp9>webm (vp9)</button><button id=testWebmvp92>webm (vp9 10 bits)</button>
 
     <br>
     <input type="checkbox" id="videocheck" checked><label for="videocheck">video</label>
