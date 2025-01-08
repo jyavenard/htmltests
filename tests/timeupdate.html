@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logging timeupdate</title>
+</head>
+<body>
+
+<section>
+    <video src="https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4" controls width="320" height="240"></video>
+    <p>permalink: <a id="permalink" href=""></a></p>
+    <p><pre id="log"></pre></p>
+</section>
+
+<script src="common.js"></script>
+
+<script>
+    var logger = new Logger('log');
+    logger.log('Log: (times in ms)');
+
+    var previousTime = 0;
+    var video = document.querySelector('video');
+    video.addEventListener('timeupdate', function(e) {
+        logger.log('* timeupdate');
+        let outOfOrder = video.currentTime < previousTime;
+        previousTime = video.currentTime;
+        logger.log('video.currentTime = ' + video.currentTime + (outOfOrder ? " *** out of order ***" : ""));
+    });
+
+</script>
+</body>
+</html>
