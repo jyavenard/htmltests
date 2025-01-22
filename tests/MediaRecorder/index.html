@@ -56,6 +56,9 @@
         testH264Opus.onclick = () => {
             doEncode("video/mp4;codecs=avc1.42e01e,opus", "mp4");
         }
+        testH264PCM.onclick = () => {
+            doEncode("video/mp4;codecs=avc1.42e01e,pcm", "mp4");
+        }
 
         testH265.onclick = () => {
             doEncode("video/mp4;codecs=hev1.1.6.L93.B0", "mp4");
@@ -75,18 +78,18 @@
         }
         testWebmvp92.onclick = () => {
             doEncode("video/webm; codecs=\"vp09.02.30.10\"", "webm");
+        testWebmH264.onclick = () => {
+            doEncode("video/webm; codecs=\"avc1.42e01e, pcm\"", "webm");
         }
     }
     </script>
 <body>
     <h1>Media Recorder demo</h1>
-    <button id=testH264>test H264</button>    <button id=testH264Opus>test H264 with Opus</button>
+    <button id=testH264>test mp4 (H264)</button><button id=testH264Opus>mp4 (H264/opus)</button><button id=testH264PCM>mp4 (H264/pcm)</button>
     <br>
-    <button id=testH265>test H265</button>
+    <button id=testH265>test mp4 (H265)</button><button id=testAV1>test mp4 (AV1)</button>
     <br>
-    <button id=testAV1>test AV1</button>
-    <br>
-    <button id=testWebm>webm (default)</button><button id=testWebmvp8>webm (vp8)</button><button id=testWebmvp9>webm (vp9)</button><button id=testWebmvp92>webm (vp9 10 bits)</button>
+    <button id=testWebm>webm (default)</button><button id=testWebmvp8>webm (vp8)</button><button id=testWebmvp9>webm (vp9)</button></button><button id=testWebmvp92>webm (vp9 10 bits)</button><button id=testWebmH264>webm (h264/pcm)</button>
 
     <br>
     <input type="checkbox" id="videocheck" checked><label for="videocheck">video</label>
