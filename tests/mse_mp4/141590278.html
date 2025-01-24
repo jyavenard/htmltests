@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+  <title>MSE: |waiting| event when source data is missing</title>
+  <script type="text/javascript" src="mediasource.js"></script>
+</head>
+<body>
+<pre id="test"><script class="testbody" type="text/javascript">
+
+runWithMSE(async function(ms, el) {
+  el.controls = true;
+  await once(ms, 'sourceopen');
+  ok(true, "Receive a sourceopen event");
+  var audiosb = ms.addSourceBuffer("audio/mp4; codecs=mp4a.40.2");
+  var videosb = ms.addSourceBuffer("video/mp4; codecs=avc1.42000a");
+  audiosb.appendWindowEnd = 3.021950113378686;
+  videosb.appendWindowEnd = 3.033333333333335;
+  await fetchAndLoad(audiosb, 'bipbop/bipbop_audio', ['init'], '.mp4');
+  await fetchAndLoad(videosb, 'bipbop/bipbop_video', ['init'], '.mp4');
+  await fetchAndLoad(audiosb, 'bipbop/bipbop_audio', range(1, 5), '.m4s');
+  await fetchAndLoad(videosb, 'bipbop/bipbop_video', range(1, 6), '.m4s');
+  info("Invoking play()");
+  await el.play();
+  ms.endOfStream();
+  await once(el, 'ended');
+  info("ended event fired");
+  info(`audiosb.buffered= ${timeRangeToString(audiosb.buffered)}`);
+  info(`videosb.buffered= ${timeRangeToString(videosb.buffered)}`);
+  info(`video.buffered= ${timeRangeToString(videosb.buffered)}`);
+});
+
+</script>
+</pre>
+</body>
+</html>
