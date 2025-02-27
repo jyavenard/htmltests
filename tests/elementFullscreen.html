@@ -1,0 +1,77 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Fullscreen: test page</title>
+  <script>
+    async function toggleFullScreen(element) {
+        var mode = element.webkitPresentationMode;
+        if (!element.fullscreenElement) {
+            if (!!element.requestFullscreen)
+                await element.requestFullscreen();
+            else if (!!element.webkitEnterFullscreen)
+                element.webkitEnterFullscreen();
+        }
+        else if (document.exitFullscreen)
+            document.exitFullscreen();
+    }
+
+    window.onload = async function() {
+        const id = 'log';
+        spatialfull.onclick = toggleFullScreen.bind(null, video1);
+        spatialelement.onclick = toggleFullScreen.bind(null, spatial);
+        immersivefull.onclick = toggleFullScreen.bind(null, video2);
+        immersiveelement.onclick = toggleFullScreen.bind(null, immersive);
+        videoselement.onclick = toggleFullScreen.bind(null, videos);
+    }
+
+    function smaller() {
+        spatial.style = "width: 320px; height: 240px";
+        immersive.style = "width: 160px; height: 120px";
+    }
+    function bigger() {
+        spatial.style = "width: 160px; height: 120px";
+        immersive.style = "width: 320px; height: 240px";        
+    }
+    function same() {
+        spatial.style = "width: 320px; height: 240px";
+        immersive.style = "width: 320px; height: 240px";        
+    }
+    function smaller2() {
+        spatial.style = "width: 60%; height: 60%";
+        immersive.style = "width: 40%; height: 40%";        
+    }
+    function bigger2() {
+        spatial.style = "width: 40%; height: 40%";
+        immersive.style = "width: 60%; height: 60%";        
+    }
+    function same2() {
+        spatial.style = "width: 50%; height: 50%";
+        immersive.style = "width: 50%; height: 50%";        
+    }
+    </script>
+<body>
+    <h1>Spatial/Immersive Video Example. native vs element fullscreen</h1>
+    <h2>HTML5 video with MP4 video</h2>
+    <div id="videos">
+        <button id="button1" onclick="smaller()">smaller absolute</button>
+        <button id="button2" onclick="bigger()">bigger absolute</button>
+        <button id="button3" onclick="same()">same absolute</button>
+        <p/>
+        <button id="button4" onclick="smaller2()">smaller %</button>
+        <button id="button5" onclick="bigger2()">bigger %</button>
+        <button id="button6" onclick="same2()">same %</button>
+        <p/>
+        <div id="spatial" style="width: 320px; height: 240px">
+            <video id='video1' style="object-fit: cover;" width="100%" height="100%" playsinline loop controls src="../mediatest/mp4/spatial/cat.mov"></video>
+        </div>
+        <button id="spatialfull">Video Fullscreen</button>
+        <button id="spatialelement">Video Fullscreen</button>
+        <div id="immersive" style="width: 320px; height: 240px">
+            <video id='video2' style="object-fit: cover;" width="100%" height="100%" playsinline loop controls muted src="../mediatest/mp4/immersive/Canon_180_mono_APMP.mov"></video>
+        </div>
+        <button id="immersivefull">Video Fullscreen</button>
+        <button id="immersiveelement">Video Fullscreen</button>
+    </div>
+    <button id="videoselement">Videos Fullscreen</button>
+</body>
+</html>
