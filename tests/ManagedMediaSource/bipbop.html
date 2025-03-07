@@ -50,6 +50,7 @@ function runWithManagedMSE(testFunction, id = 'log') {
 
     // Or explicitly disable the Remote Playback API
     video.disableRemotePlayback = true;
+    video.loop = true;
 
     testFunction(source, video);
   };
