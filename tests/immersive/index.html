@@ -1,0 +1,45 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Fullscreen: test page</title>
+  <script>
+    async function toggleFullScreen(element) {
+        var mode = element.webkitPresentationMode;
+        if (!element.fullscreenElement) {
+            if (!!element.requestFullscreen)
+                await element.requestFullscreen();
+            else if (!!element.webkitEnterFullscreen)
+                element.webkitEnterFullscreen();
+        }
+        else if (document.exitFullscreen)
+            document.exitFullscreen();
+    }
+
+
+    window.onload = async function() {
+        const id = 'log';
+
+        video1.src = "https://store-028.blobstore.apple.com/videos/2024/10/13/19/03/4b828a79fd221076c4cf26ebcceec0dfa06cbdeb.mov?response-content-type=video%2Fquicktime&AWSAccessKeyId=MKIAX6CG8YHDH7DOGBWH&Signature=OrsJcnwA00p5%2B0KNk%2BruHQFriv8%3D&Expires=1760407428";
+        video1.preload = "auto";
+
+        let button1 = document.createElement("BUTTON");
+        button1.innerText = "Video Fullscreen";
+        crabs.appendChild(button1);
+        button1.onclick = toggleFullScreen.bind(null, video1);
+
+        let button2 = document.createElement("BUTTON");
+        button2.innerText = "Div Element Fullscreen";
+        crabs.appendChild(button2);
+        button2.onclick = toggleFullScreen.bind(null, videodiv1);
+    }
+    </script>
+<body>
+    <h1>Immersive Video Example. native vs element fullscreen</h1>
+    <h2>HTML5 video with MP4 video</h2>
+    <div id="crabs">
+        <div id="videodiv1" style="width: 320px; height: 240px">
+            <video id='video1' style="object-fit: cover;" width="100%" height="100%" playsinline loop controls></video>
+        </div>
+    </div>
+</body>
+</html>
