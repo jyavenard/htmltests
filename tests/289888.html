@@ -1,0 +1,18 @@
+<html>
+<head></head>
+<script>
+    async function start() {
+        video.onloadeddata = () => {
+            document.getElementById("currentSrc").innerHTML = `currentSrc = ${video.currentSrc}`;            
+        };
+    }
+</script>
+<body onload="start()">
+    <video id="video" controls width="250" height="200" muted autoplay playsinline>
+        <source src="../mediatest/webm/Schlossbergbahn.webm.360p.vp9.webm" type="video/webm" />
+        <source src="../mediatest/webm/Schlossbergbahn.webm.480p.vp9.webm" type="video/webm" />
+        <source src="../mediatest/webm/Morocco_1080p30.webm" type="video/webm" />
+    </video>
+    <br>
+    <div id="currentSrc"></div>
+</body>
