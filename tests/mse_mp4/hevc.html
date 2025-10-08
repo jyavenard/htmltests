@@ -1,0 +1,81 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Fullscreen: test page</title>
+  <script>
+    async function toggleFullScreen(element) {
+        var mode = element.webkitPresentationMode;
+        if (!element.fullscreenElement) {
+            if (!!element.requestFullscreen)
+                await element.requestFullscreen();
+            else if (!!element.webkitEnterFullscreen)
+                element.webkitEnterFullscreen();
+        }
+        else if (document.exitFullscreen)
+            document.exitFullscreen();
+    }
+
+    const manifest = {
+        "url": "../../mediatest/fragmented/hevc/everestvr_5.7k_30s_360_h265_crf23_binaural_CREDIT_JON_GRIFFITH_injected.mp4","type":"video/mp4; codecs=\"hev1.1.6.H180.90,mp4a.40.2\"",
+        "init":{"offset":0,"size":4120},
+        "media": [
+            {"offset":4120,"size":28177064,"timestamp":0,"duration":22.5225},
+            {"offset":28181184,"size":554926,"timestamp":0,"duration":36.0448},
+            {"offset":28736110,"size":120,"timestamp":0,"duration":30.03},
+            {"offset":28736230,"size":6237514,"timestamp":22.5225,"duration":7.5075},
+            {"offset":34973744,"size":182680,"timestamp":36.0448,"duration":12.014933333333333},
+            {"offset":35156424,"size":562,"timestamp":48.059733333333334,"duration":0.0224}
+        ]
+    };
+
+    async function fetchSegment(url, segmentManifest) {
+        let request = new Request(url);
+        request.headers.append("Range", `bytes=${segmentManifest.offset}-${segmentManifest.offset + segmentManifest.size - 1}`);
+        const response = await fetch(request);
+        return response.arrayBuffer();
+    }
+
+    async function loadSegment(sourceBuffer, segment) {
+        return new Promise((resolve) => {
+            sourceBuffer.addEventListener("updateend", resolve, { once: true });
+            sourceBuffer.appendBuffer(segment);
+        });
+    }
+
+    window.onload = async function() {
+        const id = 'log';
+
+        if (!!!window.ManagedMediaSource)
+            return;
+        video2.disableRemotePlayback = true;
+        var source = new ManagedMediaSource();
+        await new Promise((resolve) => {
+            video2.src = URL.createObjectURL(source);
+            source.addEventListener("sourceopen", resolve, { once: true });
+        });
+        var sourceBuffer = source.addSourceBuffer(manifest.type);
+
+        const segment = await fetchSegment(manifest.url, manifest.init);
+        await loadSegment(sourceBuffer, segment);
+
+        const fetchPromises = manifest.media.map(async (segment, index) => {
+            return fetchSegment(manifest.url, segment);
+        });
+        for (var i = 0; i < fetchPromises.length; i++) {
+            await Promise.all(fetchPromises.slice(0, i - 1));
+            const data = await fetchPromises[i];
+            await loadSegment(sourceBuffer, data);
+        }        
+
+        source.endOfStream();
+    }
+    </script>
+<body>
+    <h2>HTML5 video with MSE video</h2>
+    <div id="mse">
+        <div id="videodiv2" style="width: 320px; height: 240px">
+            <video id='video2' style="object-fit: cover;" width="100%" height="100%" playsinline loop controls></video>
+        </div>
+    </div>
+</body>
+</html>
