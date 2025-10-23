@@ -1,0 +1,92 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Fullscreen: test page</title>
+  <script>
+    async function toggleFullScreen(element) {
+        var mode = element.webkitPresentationMode;
+        if (!element.fullscreenElement) {
+            if (!!element.requestFullscreen)
+                await element.requestFullscreen();
+            else if (!!element.webkitEnterFullscreen)
+                element.webkitEnterFullscreen();
+        }
+        else if (document.exitFullscreen)
+            document.exitFullscreen();
+    }
+
+    const manifest = {
+        "url":"../mediatest/fragmented/bipbop-fragmented.mp4","type":"video/mp4; codecs=\"avc1.4d4015\"",
+        "init":{"offset":0,"size":1395},
+        "media":[
+            {"offset":1463,"size":24356,"timestamp":0,"duration":0.7683333333333333},
+            {"offset":25887,"size":22137,"timestamp":0.7683333333333333,"duration":0.8},
+            {"offset":48092,"size":23945,"timestamp":1.5683333333333334,"duration":0.8016666666666666},
+            {"offset":72105,"size":23044,"timestamp":2.37,"duration":0.8},
+            {"offset":95217,"size":18299,"timestamp":3.17,"duration":0.8016666666666666},
+            {"offset":113584,"size":24387,"timestamp":3.9716666666666667,"duration":0.8},
+            {"offset":138039,"size":22374,"timestamp":4.7716666666666665,"duration":0.8016666666666666},
+            {"offset":160481,"size":24288,"timestamp":5.573333333333333,"duration":0.8},
+            {"offset":184837,"size":23184,"timestamp":6.373333333333333,"duration":0.8016666666666666},
+            {"offset":208089,"size":18211,"timestamp":7.175,"duration":0.8},
+            {"offset":226368,"size":24539,"timestamp":7.975,"duration":0.8016666666666666},
+            {"offset":250975,"size":22608,"timestamp":8.776666666666667,"duration":0.8},
+            {"offset":273655,"size":9775,"timestamp":9.576666666666666,"duration":0.2666777777777778}
+        ]
+    };
+
+    async function fetchSegment(url, segmentManifest) {
+        let request = new Request(url);
+        request.headers.append("Range", `bytes=${segmentManifest.offset}-${segmentManifest.offset + segmentManifest.size - 1}`);
+        const response = await fetch(request);
+        return response.arrayBuffer();
+    }
+
+    async function loadSegment(sourceBuffer, segment) {
+        return new Promise((resolve) => {
+            sourceBuffer.addEventListener("updateend", resolve, { once: true });
+            sourceBuffer.appendBuffer(segment);
+        });
+    }
+    
+    window.onload = async function() {
+        const id = 'log';
+        fullscreen.onclick = toggleFullScreen.bind(null, video1);
+        elementfullscreen.onclick = toggleFullScreen.bind(null, element);
+
+        if (!!!window.ManagedMediaSource)
+            return;
+        video1.disableRemotePlayback = true;
+        var source = new ManagedMediaSource();
+        await new Promise((resolve) => {
+            video1.src = URL.createObjectURL(source);
+            source.addEventListener("sourceopen", resolve, { once: true });
+        });
+        var sourceBuffer = source.addSourceBuffer(manifest.type);
+
+        const segment = await fetchSegment(manifest.url, manifest.init);
+        await loadSegment(sourceBuffer, segment);
+
+        const fetchPromises = manifest.media.map(async (segment, index) => {
+            return fetchSegment(manifest.url, segment);
+        });
+        for (var i = 0; i < fetchPromises.length; i++) {
+            await Promise.all(fetchPromises.slice(0, i - 1));
+            const data = await fetchPromises[i];
+            await loadSegment(sourceBuffer, data);
+        }        
+
+        source.endOfStream();
+    }
+
+    </script>
+<body>
+    <h1>native vs element fullscreen</h1>
+    <h2>HTML5 video with MSE video</h2>
+    <div id="element" style="width: 320px; height: 240px">
+        <video id='video1' style="object-fit: cover;" width="100%" height="100%" playsinline loop controls></video>
+    </div>
+    <button id="fullscreen">Video Native Fullscreen</button>
+    <button id="elementfullscreen">Video Element Fullscreen</button>
+</body>
+</html>
