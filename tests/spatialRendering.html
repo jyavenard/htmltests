@@ -1,0 +1,39 @@
+<html>
+<head>
+    <title>Media Capabilities Test</title>
+    <style>
+        body {
+            color: black;
+            font-family:Arial, Helvetica, sans-serif;
+            font-size: 10pt
+        }
+    </style>
+</head>
+<body onload="onLoad()">
+    <div>
+        <p><b>Audio spatial rendering supported:</b></p>
+        <span id="spatialRenderingSupported"></span>
+    </div>
+    <script>
+        function updateStatus(supported) {
+            let statusElement = document.getElementById('spatialRenderingSupported');
+            statusElement.innerHTML = `${supported}`;
+            statusElement.style.color = supported ? 'green' : 'red';
+        }
+
+        function onLoad() {
+            const supported = navigator.mediaCapabilities.decodingInfo({
+                type: 'media-source',
+                audio: {
+                    contentType: 'audio/mp4;codecs=ec-3',
+                    spatialRendering: true,
+                },
+            }).then(result => {
+                updateStatus(result.supported);
+            }).catch(error => {
+                console.log(error);
+            });
+        }
+    </script>
+</body>
+</html>
