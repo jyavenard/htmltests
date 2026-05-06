@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Twitch MSE Replay — content → ad handoff (single SB)</title>
+<style>
+  body { margin: 16px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .row { display: flex; gap: 16px; align-items: flex-start; }
+  video { background: #000; width: 640px; height: 360px; }
+  #controls { margin: 8px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #status { background: #f3f3f3; padding: 6px 8px; border-radius: 4px; margin-bottom: 6px; }
+  #log { white-space: pre-wrap; border: 1px solid #ccc; padding: 6px; height: 520px; overflow-y: auto; flex: 1; }
+  .error { color: #c00; font-weight: 600; }
+  .warn { color: #c75b00; font-weight: 600; }
+  .ms   { color: #0066aa; }
+  .sb   { color: #5a5; }
+  .dim  { color: #888; }
+  .hi   { background: #ffe; }
+  .note { color: #444; font-size: 11px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>Twitch MSE Replay — content → ad handoff in a single SourceBuffer</h1>
+<div class="note">
+  Replays the captured content SourceBuffer, then — without tearing down the <code>&lt;video&gt;</code> / <code>MediaSource</code> (i.e. without the Twitch JS cascade) — appends the ad-2 segments using <code>sb.changeType()</code>.
+  Tests the intrinsic MSE content→ad handoff behavior. Compare Safari vs Chrome: does playback stall? does <code>waiting</code> fire? does playback resume when ad data lands?
+</div>
+
+<div class="row">
+  <div>
+    <video id="video" controls muted></video>
+    <div id="controls">
+      <label>content codec: <input type="text" id="codec" value="video/mp4; codecs=&quot;avc1.4d401e,mp4a.40.2&quot;"></label>
+      <label>ad codec: <input type="text" id="adCodec" value="video/mp4; codecs=&quot;avc1.4d4028,mp4a.40.2&quot;"></label>
+      <button id="run">Run replay (content → ad)</button>
+      <button id="stop">Stop</button>
+      <button id="appendAdNow">Append ad NOW (manual)</button>
+      <span id="progress"></span>
+    </div>
+    <div id="status">idle</div>
+    <div class="note">
+      Default behavior: content appends in full (~8 min real-time duration if played), then the ad is appended in the same SourceBuffer after <code>changeType()</code>.
+      Use <b>"Append ad NOW"</b> to fast-forward and trigger the handoff immediately for quicker iteration (skips remaining content appends).
+    </div>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import * as lib from './common.js';
+
+function browserTag() {
+  const ua = navigator.userAgent;
+  if (ua.includes('Chrome/') && !ua.includes('Edg/')) return 'chrome';
+  if (ua.includes('Safari/') && !ua.includes('Chrome/')) return 'safari';
+  if (ua.includes('Firefox/')) return 'firefox';
+  return 'other';
+}
+
+const video = document.getElementById('video');
+const logEl = document.getElementById('log');
+const statusEl = document.getElementById('status');
+
+let running = false;
+let ticker = null;
+let untick = null;
+let state = null;
+let skipToAd = false;
+
+function reset() {
+  running = false;
+  if (ticker) { clearInterval(ticker); ticker = null; }
+  if (untick) { untick(); untick = null; }
+  try { video.pause(); } catch(_){}
+  video.removeAttribute('src');
+  video.load();
+  state = null;
+}
+
+async function runHandoff() {
+  reset();
+  logEl.innerHTML = '';
+  const log = lib.makeLogger(logEl);
+  const codec = document.getElementById('codec').value.trim();
+  const adCodec = document.getElementById('adCodec').value.trim();
+  log('config', `content codec="${codec}" isTypeSupported=${MediaSource.isTypeSupported(codec)}`);
+  log('config', `ad codec="${adCodec}" isTypeSupported=${MediaSource.isTypeSupported(adCodec)}`);
+
+  const t0 = performance.now();
+  log('fetch', 'loading content and ad-2…');
+  const [contentManifest, contentBlob, adManifest, adBlob] = await Promise.all([
+    lib.parseManifest('content.tsv'),
+    lib.fetchBlob('content.mp4', (got, total) => {
+      document.getElementById('progress').textContent = `content ${(got/1e6).toFixed(1)}/${(total/1e6).toFixed(1)} MB`;
+    }),
+    lib.parseManifest('ad-2.tsv'),
+    lib.fetchBlob('ad-2.mp4'),
+  ]);
+  log('fetch', `content: rows=${contentManifest.length} bytes=${contentBlob.byteLength}; ad-2: rows=${adManifest.length} bytes=${adBlob.byteLength}; in ${(performance.now()-t0).toFixed(0)}ms`);
+
+  const ms = new MediaSource();
+  lib.instrumentMediaSource(ms, log);
+  video.src = URL.createObjectURL(ms);
+  untick = lib.instrumentVideo(video, log);
+  await new Promise(r => ms.addEventListener('sourceopen', r, { once: true }));
+  const sb = ms.addSourceBuffer(codec);
+  sb.mode = 'segments';
+  lib.instrumentSourceBuffer(sb, log);
+  state = { ms, sb, log };
+  ticker = lib.makeStatusTicker(video, sb, statusEl);
+
+  const rs = { tso: 0, aws: 0, awe: Infinity, abortCount: 0 };
+  running = true;
+  skipToAd = false;
+
+  // Phase 1 — content
+  log('phase', 'PHASE 1: content appends', 'hi');
+  for (let i = 0; i < contentManifest.length && running; i++) {
+    if (skipToAd) { log('phase', `skip-to-ad pressed after row ${i}/${contentManifest.length}`, 'warn'); break; }
+    const entry = contentManifest[i];
+    try { await lib.replayOne(sb, contentBlob, entry, rs, log); }
+    catch (e) { log('replay', `content seq${entry.seq}: ${e.message}`, 'error'); if (video.error) break; }
+    if (i % 100 === 0)
+      log('replay', `content row=${i+1}/${contentManifest.length} recCT=${entry.currentTime.toFixed(3)} videoCT=${video.currentTime.toFixed(3)} buf=${lib.bufferedStr(sb.buffered)}`, 'dim');
+    document.getElementById('progress').textContent = `content ${i+1}/${contentManifest.length}`;
+    if (i === 15 && video.paused) { try { await video.play(); log('video:play()', 'kick'); } catch (e) { log('video:play()', e.message, 'warn'); } }
+  }
+  if (!running) { log('phase', 'stopped', 'warn'); return; }
+  log('phase', `content phase done; videoCT=${video.currentTime.toFixed(3)} buf=${lib.bufferedStr(sb.buffered)}`, 'hi');
+
+  // Phase 2 — changeType then ad append
+  log('phase', 'PHASE 2: changeType() + ad-2 appends', 'hi');
+  try {
+    if (typeof sb.changeType === 'function') {
+      sb.changeType(adCodec);
+      log('sb:changeType', `from content "${codec}" to ad "${adCodec}"`, 'warn');
+    } else {
+      log('sb:changeType', 'not supported in this browser', 'error');
+    }
+  } catch (e) { log('sb:changeType', 'threw ' + e.message, 'error'); }
+
+  for (let i = 0; i < adManifest.length && running; i++) {
+    const entry = adManifest[i];
+    try { await lib.replayOne(sb, adBlob, entry, rs, log); }
+    catch (e) { log('replay', `ad seq${entry.seq}: ${e.message}`, 'error'); if (video.error) break; }
+    if (i % 5 === 0 || i === adManifest.length - 1)
+      log('replay', `ad row=${i+1}/${adManifest.length} recCT=${entry.currentTime.toFixed(3)} videoCT=${video.currentTime.toFixed(3)} buf=${lib.bufferedStr(sb.buffered)}`, 'dim');
+    document.getElementById('progress').textContent = `ad ${i+1}/${adManifest.length}`;
+  }
+  log('phase', `ad phase done; videoCT=${video.currentTime.toFixed(3)} buf=${lib.bufferedStr(sb.buffered)}`, 'hi');
+  log('phase', 'observe: did playback resume into the ad? did waiting fire? does readyState climb back to HAVE_FUTURE/ENOUGH?');
+}
+
+document.getElementById('run').onclick = () => runHandoff().catch(console.error);
+document.getElementById('stop').onclick = () => { running = false; reset(); };
+document.getElementById('appendAdNow').onclick = () => {
+  if (!state) { alert('not running'); return; }
+  skipToAd = true;
+  state.log('action', 'skip-to-ad requested', 'warn');
+};
+
+const exportBtn = document.createElement('button');
+exportBtn.textContent = 'Download log';
+exportBtn.onclick = () => {
+  if (!state?.log) { alert('no log yet'); return; }
+  const b = new Blob([state.log.export()], { type: 'text/tab-separated-values' });
+  const url = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href = url; a.download = `events-combined-${browserTag()}.tsv`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+document.getElementById('controls').appendChild(exportBtn);
+</script>
+</body>
+</html>
