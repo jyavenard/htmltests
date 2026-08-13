@@ -41,6 +41,10 @@ seek to 0 → repeat, logging every rejection, so you can see whether a <code>pl
 rejected <i>after</i> the first activation. Section B runs on load and needs no interaction.
 </p>
 
+<p>
+<label><input type="checkbox" id="unloadOnPass"> Unload each video as soon as its test settles (frees a decoder and speeds up page load)</label>
+</p>
+
 <h2>A. Repeat play() after one gesture — MP4, WebM, MediaSource</h2>
 <div class="panels" id="panels"></div>
 
@@ -87,6 +91,30 @@ const startTime = performance.now();
 const since = () => ((performance.now() - startTime) / 1000).toFixed(2) + 's';
 const isActive = () => (navigator.userActivation ? navigator.userActivation.isActive : 'n/a');
 const describeError = error => (error && error.name ? error.name + ': ' + error.message : String(error));
+
+// Checked by default, remembered across reloads: a page holding a dozen loaded videos is slow to start and,
+// on iOS, competes for a small number of decoders.
+const UNLOAD_KEY = 'autoplay-policy.unloadOnPass';
+const unloadCheckbox = document.getElementById('unloadOnPass');
+try {
+    unloadCheckbox.checked = localStorage.getItem(UNLOAD_KEY) !== '0';
+} catch (error) {
+    unloadCheckbox.checked = true;
+}
+unloadCheckbox.addEventListener('change', () => {
+    try {
+        localStorage.setItem(UNLOAD_KEY, unloadCheckbox.checked ? '1' : '0');
+    } catch (error) { /* private browsing: the setting just will not persist */ }
+});
+const shouldUnload = () => unloadCheckbox.checked;
+
+function unloadVideo(video)
+{
+    video.pause();
+    video.replaceChildren();
+    video.removeAttribute('src');
+    video.load();
+}
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Resolves on the event, or after timeoutMs with 'timeout', so a seek that never completes cannot wedge a loop.
@@ -290,6 +318,12 @@ function addLoopPanel(label, description, setup)
         state.looping = false;
         startButton.disabled = false;
         stopButton.disabled = true;
+        if (shouldUnload()) {
+            unloadVideo(video);
+            // Start has to load it again.
+            state.setupDone = false;
+            log('unloaded');
+        }
     });
 
     setInterval(() => { if (state.looping) updateSummary(); }, 500);
@@ -458,26 +492,23 @@ function addRow(title, desc, build, options)
     setInterval(render, 400);
     render();
 
-    // iOS has few concurrent decoders, and nine live players starve each other. Once a row's verdict is
-    // settled, freeze it and let go of the media. ?keep=1 disables this.
-    if (!state.probeInvisible && params.get('keep') !== '1') {
+    // Once a row's verdict is settled, optionally freeze it and let go of the media. These scenarios only ask
+    // whether playback started; what happens to playback afterwards is section A's job, and those panels never
+    // unload while looping. Left unchecked, the element is untouched and simply keeps playing.
+    if (!state.probeInvisible) {
         const releaseTimer = setInterval(() => {
+            if (!shouldUnload())
+                return;
             const settled = state.progressed || state.outcome.startsWith('REJECTED') || video.error
                 || performance.now() > state.deadline;
             if (!settled)
                 return;
             clearInterval(releaseTimer);
-            // Give a moment for an immediate post-start pause to show up in the verdict first.
-            setTimeout(() => {
-                state.frozen = verdict();
-                state.released = true;
-                video.pause();
-                video.replaceChildren();
-                video.removeAttribute('src');
-                video.load();
-                render();
-            }, 2000);
-        }, 500);
+            state.frozen = verdict();
+            state.released = true;
+            unloadVideo(video);
+            render();
+        }, 250);
     }
 
     const entry = { video, state, title };
