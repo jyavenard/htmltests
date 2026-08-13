@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>autoplay / play() policy probe</title>
+<style>
+    body { font: 13px -apple-system, sans-serif; margin: 12px; }
+    h1 { font-size: 16px; }
+    h2 { font-size: 14px; margin: 18px 0 6px; }
+    .ua { color: #666; font-size: 11px; word-break: break-all; }
+    .panels { display: flex; gap: 10px; flex-wrap: wrap; }
+    .panel { border: 1px solid #ccc; border-radius: 6px; padding: 8px; flex: 1 1 320px; min-width: 300px; }
+    .panel video { width: 100%; height: 160px; background: #000; }
+    .row { border: 1px solid #ccc; border-radius: 6px; padding: 8px; margin: 8px 0; display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+    .row video { width: 250px; height: 140px; background: #000; flex: 0 0 auto; }
+    .info { flex: 1 1 300px; min-width: 260px; }
+    .title { font-weight: 600; }
+    .desc { color: #555; margin: 2px 0 4px; }
+    pre { margin: 0; font: 11px ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+    .log { max-height: 30vh; overflow: auto; border: 1px solid #ddd; background: #fafafa; padding: 4px; border-radius: 4px; margin-top: 6px; }
+    .verdict { font-weight: 600; }
+    .played { color: #0a7d24; }
+    .blocked { color: #c00; }
+    .pending { color: #b58900; }
+    .neutral { color: #06c; }
+    .spacer { height: 120vh; border-left: 2px dashed #ccc; margin: 8px 0; color: #999; padding-left: 6px; }
+    button { font: inherit; padding: 4px 10px; }
+    label { margin-right: 8px; }
+    .controls { margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>autoplay / <code>play()</code> policy probe</h1>
+<div class="ua" id="ua"></div>
+<p>
+Every video here is <code>muted playsinline</code>.
+Section A is gesture-driven: press <b>Start test</b> and it loops <code>play()</code> → wait → <code>pause()</code> →
+seek to 0 → repeat, logging every rejection, so you can see whether a <code>play()</code> promise is ever
+rejected <i>after</i> the first activation. Section B runs on load and needs no interaction.
+</p>
+
+<h2>A. Repeat play() after one gesture — MP4, WebM, MediaSource</h2>
+<div class="panels" id="panels"></div>
+
+<h2>B. Scenario matrix (runs on load, no gesture)</h2>
+<pre id="hint"></pre>
+<div id="matrix"></div>
+
+<script>
+'use strict';
+
+// Overridable: ?mp4=…&webm=…&mse=…&mseType=…  Use ?only=N to run a single matrix scenario (helps when
+// several simultaneous videos are more than the device will decode), ?only=a for section A alone.
+const params = new URLSearchParams(location.search);
+// Small files on purpose: the 1080p assets in this tree take too long to load to be useful here.
+// bipbop-fragmented.mp4 is 283 kB, 400x300, H.264 + AAC, 10 s; the WebM is 1 MB, 640x360, VP9 + Opus, 12 s.
+const MP4 = params.get('mp4') || '../mediatest/fragmented/bipbop-fragmented.mp4';
+const WEBM = params.get('webm') || '../mediatest/webm/Schlossbergbahn.webm.360p.vp9.webm';
+const MSE_URL = params.get('mse') || '../mediatest/fragmented/bipbop-fragmented.mp4';
+const MSE_TYPE = params.get('mseType') || 'video/mp4; codecs="avc1.4d4015"';
+const ONLY = params.get('only');
+const WEBM_SOURCES = [
+    '../mediatest/webm/Schlossbergbahn.webm.360p.vp9.webm',
+    '../mediatest/webm/Schlossbergbahn.webm.480p.vp9.webm',
+];
+const MEDIA_ERROR = { 1: 'MEDIA_ERR_ABORTED', 2: 'MEDIA_ERR_NETWORK', 3: 'MEDIA_ERR_DECODE', 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
+const READY_STATE = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
+const NETWORK_STATE = ['EMPTY', 'IDLE', 'LOADING', 'NO_SOURCE'];
+const TRACKED_EVENTS = ['loadedmetadata', 'canplay', 'canplaythrough', 'play', 'playing', 'pause', 'ended', 'waiting', 'stalled', 'suspend', 'error'];
+// How long a scenario may sit at "waiting to start" before it is called a failure.
+const START_DEADLINE_MS = 8000;
+
+document.getElementById('ua').textContent = navigator.userAgent;
+
+const startTime = performance.now();
+const since = () => ((performance.now() - startTime) / 1000).toFixed(2) + 's';
+const isActive = () => (navigator.userActivation ? navigator.userActivation.isActive : 'n/a');
+const describeError = error => (error && error.name ? error.name + ': ' + error.message : String(error));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// ---------------------------------------------------------------- section A
+
+function attachMediaSource(video, log)
+{
+    if (!window.MediaSource) {
+        log('MediaSource is not available');
+        return;
+    }
+    if (!MediaSource.isTypeSupported(MSE_TYPE)) {
+        log('MediaSource.isTypeSupported("' + MSE_TYPE + '") is false');
+        return;
+    }
+
+    const mediaSource = new MediaSource();
+    video.src = URL.createObjectURL(mediaSource);
+    mediaSource.addEventListener('sourceopen', async () => {
+        try {
+            const sourceBuffer = mediaSource.addSourceBuffer(MSE_TYPE);
+            const response = await fetch(MSE_URL);
+            const data = await response.arrayBuffer();
+            await new Promise((resolve, reject) => {
+                sourceBuffer.addEventListener('updateend', resolve, { once: true });
+                sourceBuffer.addEventListener('error', reject, { once: true });
+                sourceBuffer.appendBuffer(data);
+            });
+            mediaSource.endOfStream();
+            log('appended ' + data.byteLength + ' bytes, buffered '
+                + (sourceBuffer.buffered.length ? sourceBuffer.buffered.end(0).toFixed(2) + 's' : 'nothing'));
+        } catch (error) {
+            log('MediaSource setup failed: ' + describeError(error));
+        }
+    }, { once: true });
+}
+
+function addLoopPanel(label, description, setup)
+{
+    if (ONLY !== null && ONLY !== 'a')
+        return;
+
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.innerHTML = '<div class="title"></div><div class="desc"></div>'
+        + '<video muted playsinline controls></video>'
+        + '<div class="controls">'
+        + '<label>play <input class="playMs" type="number" value="600" min="0" step="100" style="width:4.5em"> ms</label>'
+        + '<label>idle <input class="idleMs" type="number" value="400" min="0" step="100" style="width:4.5em"> ms</label>'
+        + '</div>'
+        + '<div class="controls"><button class="start">Start test</button> <button class="stop" disabled>Stop test</button></div>'
+        + '<pre class="summary">not started</pre><pre class="log"></pre>';
+    panel.querySelector('.title').textContent = label;
+    panel.querySelector('.desc').textContent = description;
+    document.getElementById('panels').appendChild(panel);
+
+    const video = panel.querySelector('video');
+    const logNode = panel.querySelector('.log');
+    const summaryNode = panel.querySelector('.summary');
+    const startButton = panel.querySelector('.start');
+    const stopButton = panel.querySelector('.stop');
+
+    const log = line => {
+        logNode.textContent += line + '\n';
+        logNode.scrollTop = logNode.scrollHeight;
+    };
+
+    const state = { looping: false, iteration: 0, resolved: 0, rejected: 0, firstRejection: null, gestureTime: 0 };
+
+    function updateSummary()
+    {
+        const elapsed = state.gestureTime
+            ? ((performance.now() - state.gestureTime) / 1000).toFixed(1) + 's since gesture'
+            : 'not started';
+        let text = 'iterations ' + state.iteration + ' · resolved ' + state.resolved
+            + ' · rejected ' + state.rejected + ' · ' + elapsed;
+        if (state.firstRejection) {
+            text += '\nFIRST REJECTION at iteration ' + state.firstRejection.iteration + ', '
+                + state.firstRejection.afterGesture + ' after the gesture: ' + state.firstRejection.error;
+        }
+        summaryNode.textContent = text;
+    }
+
+    async function runLoop()
+    {
+        while (state.looping) {
+            state.iteration++;
+            const active = isActive();
+            const afterGesture = ((performance.now() - state.gestureTime) / 1000).toFixed(1) + 's';
+            let outcome;
+            try {
+                await video.play();
+                state.resolved++;
+                outcome = 'resolved';
+            } catch (error) {
+                state.rejected++;
+                outcome = 'REJECTED ' + describeError(error);
+                if (!state.firstRejection)
+                    state.firstRejection = { iteration: state.iteration, afterGesture, error: describeError(error) };
+            }
+            log('#' + state.iteration + ' +' + afterGesture + ' isActive=' + active
+                + ' readyState=' + video.readyState + ' → ' + outcome
+                + ' (paused=' + video.paused + ' t=' + video.currentTime.toFixed(2) + ')');
+            updateSummary();
+
+            if (!state.looping)
+                break;
+            await sleep(Math.max(0, parseInt(panel.querySelector('.playMs').value, 10) || 0));
+            video.pause();
+            video.currentTime = 0;
+            if (!state.looping)
+                break;
+            await sleep(Math.max(0, parseInt(panel.querySelector('.idleMs').value, 10) || 0));
+        }
+        log('-- stopped --');
+    }
+
+    startButton.addEventListener('click', () => {
+        if (state.looping)
+            return;
+        state.looping = true;
+        state.gestureTime = performance.now();
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        log('gesture at ' + since() + ', isActive=' + isActive());
+        runLoop();
+    });
+
+    stopButton.addEventListener('click', () => {
+        state.looping = false;
+        startButton.disabled = false;
+        stopButton.disabled = true;
+    });
+
+    setInterval(() => { if (state.looping) updateSummary(); }, 500);
+
+    setup(video, log);
+}
+
+addLoopPanel('MP4 file', 'Progressive download, src attribute.', video => { video.src = MP4; });
+addLoopPanel('WebM file', 'Progressive download, VP9.', video => { video.src = WEBM; });
+addLoopPanel('MediaSource', 'Fragmented MP4 appended into a SourceBuffer.', attachMediaSource);
+
+// ---------------------------------------------------------------- section B
+
+const matrix = document.getElementById('matrix');
+const rows = [];
+
+// A media error of 4 (SRC_NOT_SUPPORTED) covers both "server did not give me the file" and "engine cannot
+// play it", so ask the server directly and report which one it was.
+function probeHTTP(video, state)
+{
+    const url = video.currentSrc || video.src;
+    if (!url || state.httpProbe)
+        return;
+    state.httpProbe = 'pending';
+    fetch(url, { method: 'HEAD' }).then(response => {
+        state.httpProbe = 'HTTP ' + response.status + ' ' + (response.headers.get('content-type') || 'no content-type')
+            + ' ' + (response.headers.get('content-length') || '?') + ' bytes';
+        state.render();
+    }, error => {
+        state.httpProbe = 'HEAD failed: ' + describeError(error);
+        state.render();
+    });
+}
+
+let rowNumber = 0;
+
+function addRow(title, desc, build, options)
+{
+    // ?only=N runs a single scenario; ?only=a runs section A alone.
+    rowNumber++;
+    if (ONLY !== null && ONLY !== String(rowNumber))
+        return { video: document.createElement('video'), state: { render() {}, events: [], outcome: '—', skipped: true } };
+
+    const spacerText = options && options.spacerBefore;
+    if (spacerText) {
+        const spacer = document.createElement('div');
+        spacer.className = 'spacer';
+        spacer.textContent = spacerText;
+        matrix.appendChild(spacer);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<div class="info"><div class="title"></div><div class="desc"></div><pre></pre></div>';
+    row.querySelector('.title').textContent = title;
+    row.querySelector('.desc').textContent = desc;
+    matrix.appendChild(row);
+
+    const state = {
+        events: [], outcome: '—', activationAtCall: '—', everPlayed: false,
+        // Scenarios that only start on a button press have no deadline until it is pressed.
+        deadline: options && options.manual ? Infinity : performance.now() + START_DEADLINE_MS,
+        probeInvisible: !!(options && options.probeInvisible),
+    };
+    const output = row.querySelector('pre');
+    const video = build(row, state);
+    row.insertBefore(video, row.firstChild);
+
+    for (const type of TRACKED_EVENTS) {
+        video.addEventListener(type, () => {
+            state.events.push(type + '@' + since());
+            if (type === 'playing') {
+                if (!state.everPlayed)
+                    state.startedWhileHidden = !state.isVisible;
+                state.everPlayed = true;
+            }
+            if (type === 'error')
+                probeHTTP(video, state);
+            render();
+        });
+    }
+
+    if (window.IntersectionObserver) {
+        // Seed synchronously: the observer's first callback may land after playback has begun.
+        const box = video.getBoundingClientRect();
+        state.isVisible = box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth;
+        new IntersectionObserver(entries => {
+            state.isVisible = entries[entries.length - 1].isIntersecting;
+            render();
+        }).observe(video);
+    } else
+        state.isVisible = true;
+
+    function verdict()
+    {
+        if (video.error) {
+            return {
+                text: 'MEDIA ERROR ' + video.error.code + ' (' + (MEDIA_ERROR[video.error.code] || '?') + ')'
+                    + (video.error.message ? ' — ' + video.error.message : ''),
+                cls: 'blocked',
+            };
+        }
+        if (state.probeInvisible) {
+            // Neither outcome is a failure: it reports whether the invisible-autoplay restriction is in
+            // effect, which depends on the embedder (off by default in WebKit on macOS, on in Safari).
+            if (state.everPlayed) {
+                if (state.startedWhileHidden)
+                    return { text: 'autoplayed while invisible — invisible-autoplay restriction NOT in effect', cls: 'neutral' };
+                return { text: 'started only once scrolled into view — invisible-autoplay restriction in effect', cls: 'neutral' };
+            }
+            if (performance.now() < state.deadline)
+                return { text: 'waiting…', cls: 'pending' };
+            return { text: 'paused while invisible — invisible-autoplay restriction in effect (scroll down: it should then start)', cls: 'neutral' };
+        }
+        if (state.outcome.startsWith('REJECTED'))
+            return { text: 'BLOCKED — play() rejected', cls: 'blocked' };
+        if (state.everPlayed) {
+            if (video.ended || !video.paused)
+                return { text: 'test passed', cls: 'played' };
+            return { text: 'FAILED — paused after starting, without reaching the end', cls: 'blocked' };
+        }
+        if (performance.now() < state.deadline)
+            return { text: 'waiting to start…', cls: 'pending' };
+        return { text: 'FAILED — never started playing', cls: 'blocked' };
+    }
+
+    function render()
+    {
+        const result = verdict();
+        output.innerHTML = '<span class="verdict ' + result.cls + '">' + result.text + '</span>\n'
+            + 'paused=' + video.paused + ' ended=' + video.ended
+            + ' readyState=' + video.readyState + ' (' + READY_STATE[video.readyState] + ')'
+            + ' networkState=' + video.networkState + ' (' + NETWORK_STATE[video.networkState] + ')\n'
+            + 'currentTime=' + video.currentTime.toFixed(2)
+            + ' muted=' + video.muted + ' volume=' + video.volume
+            + ' videoWidth=' + video.videoWidth + '\n'
+            + 'play() → ' + state.outcome + ' (isActive at call: ' + state.activationAtCall + ')\n'
+            + 'currentSrc=' + (video.currentSrc || '(none)')
+            + (state.httpProbe ? '\nserver said: ' + state.httpProbe : '') + '\n'
+            + 'events: ' + (state.events.join(' ') || 'none');
+    }
+
+    state.render = render;
+    setInterval(render, 400);
+    render();
+    const entry = { video, state, title };
+    rows.push(entry);
+    return entry;
+}
+
+// Names the likely page-level cause when nothing plays, so the page explains itself.
+const hint = document.getElementById('hint');
+setInterval(() => {
+    const probes = rows.filter(row => !row.state.probeInvisible);
+    const played = probes.filter(row => row.state.everPlayed).length;
+    const rejected = probes.filter(row => row.state.outcome.startsWith('REJECTED')).length;
+    const stuck = probes.filter(row => !row.state.everPlayed && row.video.readyState === 0);
+    let text = probes.length + ' scenarios · played ' + played + ' · play() rejected ' + rejected
+        + ' · never loaded (readyState 0) ' + stuck.length;
+    if (!played && performance.now() - startTime > START_DEADLINE_MS) {
+        text += '\nNothing played at all — that is a page-level policy, not an autoplay-timing effect.';
+        if (stuck.length === probes.length)
+            text += ' Nothing loaded either, which is what an autoplay policy of Deny does (it also blocks preloading).';
+        text += '\nIn Safari check Settings for This Website → Auto-Play (and Settings → Websites → Auto-Play) for '
+            + location.hostname + '. "Never Auto-Play" requires a gesture even for muted video.';
+    }
+    hint.textContent = text;
+}, 1000);
+
+function callPlay(video, state)
+{
+    state.activationAtCall = String(isActive());
+    state.outcome = 'pending (called at ' + since() + ')';
+    state.deadline = performance.now() + START_DEADLINE_MS;
+    state.render();
+    video.play().then(() => {
+        state.outcome = 'resolved at ' + since();
+        state.render();
+    }, error => {
+        state.outcome = 'REJECTED ' + describeError(error) + ' at ' + since();
+        state.render();
+    });
+}
+
+function markupVideo(html)
+{
+    const holder = document.createElement('div');
+    holder.innerHTML = html;
+    return holder.firstElementChild;
+}
+
+// 1. autoplay attribute, above the fold, MP4.
+addRow('1. autoplay attribute, visible, MP4',
+    'Parsed markup with autoplay. No play() call, so no promise: failure here is silent.',
+    () => markupVideo('<video muted playsinline autoplay controls src="' + MP4 + '"></video>'));
+
+// 2. autoplay attribute, above the fold, WebM.
+addRow('2. autoplay attribute, visible, WebM',
+    'Same as 1 with a VP9 WebM file.',
+    () => markupVideo('<video muted playsinline autoplay controls src="' + WEBM + '"></video>'));
+
+// 3. no autoplay, play() from DOMContentLoaded (no gesture, no transient activation).
+const row3 = addRow('3. play() at DOMContentLoaded',
+    'No autoplay attribute. play() called as early as possible with no user activation.',
+    () => markupVideo('<video muted playsinline controls src="' + MP4 + '"></video>'));
+
+// 4. no autoplay, play() 6s after load, past the 5s transient activation window.
+const row4 = addRow('4. play() 6s after load',
+    'The reporter’s shape: play() long after any activation could have expired.',
+    () => markupVideo('<video muted playsinline controls src="' + MP4 + '"></video>'));
+
+// 5. element created and inserted by script, then played.
+const row5 = addRow('5. script-created element, then play()',
+    'Element constructed 1s after load; creation-time state differs from parsed elements.',
+    () => {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.controls = true;
+        video.src = MP4;
+        return video;
+    });
+
+// 6. MediaSource, autoplay attribute.
+const row6 = addRow('6. autoplay attribute, MediaSource',
+    'Parsed markup with autoplay; a fragmented MP4 is appended once the source opens.',
+    () => markupVideo('<video muted playsinline autoplay controls></video>'));
+if (!row6.state.skipped)
+    attachMediaSource(row6.video, line => { row6.state.events.push('[mse] ' + line); row6.state.render(); });
+
+// 7. autoplay attribute with <source> children, mirroring 289888.html.
+addRow('7. autoplay + <source> children',
+    'Same shape as tests/289888.html: no src attribute, resource selection from <source>.',
+    () => markupVideo('<video muted playsinline autoplay controls>'
+        + WEBM_SOURCES.map(src => '<source src="' + src + '" type="video/webm">').join('')
+        + '</video>'));
+
+// 8. play() from a tap, synchronously in the handler.
+const row8 = addRow('8. play() from a tap',
+    'Press the button: play() runs synchronously inside the gesture handler.',
+    () => markupVideo('<video muted playsinline controls src="' + MP4 + '"></video>'),
+    { manual: true });
+if (!row8.state.skipped) {
+    const tapButton = document.createElement('button');
+    tapButton.textContent = 'play() now';
+    tapButton.addEventListener('click', () => callPlay(row8.video, row8.state));
+    row8.video.parentNode.querySelector('.info').appendChild(tapButton);
+}
+
+// 9. autoplay attribute, below the fold.
+addRow('9. autoplay attribute, below the fold',
+    'Probe, not a pass/fail: parsed markup with autoplay, outside the viewport at load. Whether it autoplays tells you if the invisible-autoplay restriction is in effect. Scroll down to reveal it.',
+    () => markupVideo('<video muted playsinline autoplay controls src="' + MP4 + '"></video>'),
+    { spacerBefore: 'spacer — the next video starts outside the viewport', probeInvisible: true });
+
+document.addEventListener('DOMContentLoaded', () => { if (!row3.state.skipped) callPlay(row3.video, row3.state); });
+setTimeout(() => { if (!row5.state.skipped) callPlay(row5.video, row5.state); }, 1000);
+setTimeout(() => { if (!row4.state.skipped) callPlay(row4.video, row4.state); }, 6000);
+</script>
+</body>
+</html>
