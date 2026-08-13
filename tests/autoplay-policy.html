@@ -55,11 +55,20 @@ rejected <i>after</i> the first activation. Section B runs on load and needs no 
 // several simultaneous videos are more than the device will decode), ?only=a for section A alone.
 const params = new URLSearchParams(location.search);
 // Small files on purpose: the 1080p assets in this tree take too long to load to be useful here.
-// bipbop-fragmented.mp4 is 283 kB, 400x300, H.264 + AAC, 10 s; the WebM is 1 MB, 640x360, VP9 + Opus, 12 s.
-const MP4 = params.get('mp4') || '../mediatest/fragmented/bipbop-fragmented.mp4';
+// The MP4 is non-fragmented with moov before mdat (4.7 MB, 640x360, H.264 + AAC, 60 s): fragmented MP4s
+// belong to MediaSource only, not to progressive src playback. The WebM is 1 MB, 640x360, VP9 + Opus, 12 s.
+const MP4 = params.get('mp4') || '../mediatest/mp4/bruce_vs_ironman.mp4';
 const WEBM = params.get('webm') || '../mediatest/webm/Schlossbergbahn.webm.360p.vp9.webm';
 const MSE_URL = params.get('mse') || '../mediatest/fragmented/bipbop-fragmented.mp4';
-const MSE_TYPE = params.get('mseType') || 'video/mp4; codecs="avc1.4d4015"';
+// The file is H.264 Main level 2.1 + AAC-LC, so the SourceBuffer has to declare both tracks. The level byte
+// is spelled two ways in the wild, so try candidates and use whichever isTypeSupported() accepts.
+const MSE_TYPES = params.get('mseType') ? [params.get('mseType')] : [
+    'video/mp4; codecs="avc1.4d0015,mp4a.40.2"',
+    'video/mp4; codecs="avc1.4d4015,mp4a.40.2"',
+    'video/mp4; codecs="avc1.4d0015"',
+    'video/mp4; codecs="avc1.4d4015"',
+    'video/mp4',
+];
 const ONLY = params.get('only');
 const WEBM_SOURCES = [
     '../mediatest/webm/Schlossbergbahn.webm.360p.vp9.webm',
@@ -80,6 +89,22 @@ const isActive = () => (navigator.userActivation ? navigator.userActivation.isAc
 const describeError = error => (error && error.name ? error.name + ': ' + error.message : String(error));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Resolves on the event, or after timeoutMs with 'timeout', so a seek that never completes cannot wedge a loop.
+function waitForEvent(target, type, timeoutMs)
+{
+    return new Promise(resolve => {
+        const timer = setTimeout(() => {
+            target.removeEventListener(type, onEvent);
+            resolve('timeout');
+        }, timeoutMs);
+        function onEvent() {
+            clearTimeout(timer);
+            resolve('event');
+        }
+        target.addEventListener(type, onEvent, { once: true });
+    });
+}
+
 // ---------------------------------------------------------------- section A
 
 function attachMediaSource(video, log)
@@ -88,28 +113,47 @@ function attachMediaSource(video, log)
         log('MediaSource is not available');
         return;
     }
-    if (!MediaSource.isTypeSupported(MSE_TYPE)) {
-        log('MediaSource.isTypeSupported("' + MSE_TYPE + '") is false');
+    for (const type of MSE_TYPES)
+        log('isTypeSupported("' + type + '") = ' + MediaSource.isTypeSupported(type));
+    const type = MSE_TYPES.find(candidate => MediaSource.isTypeSupported(candidate));
+    if (!type) {
+        log('no candidate type is supported, giving up');
         return;
     }
 
     const mediaSource = new MediaSource();
     video.src = URL.createObjectURL(mediaSource);
     mediaSource.addEventListener('sourceopen', async () => {
+        let sourceBuffer;
         try {
-            const sourceBuffer = mediaSource.addSourceBuffer(MSE_TYPE);
+            sourceBuffer = mediaSource.addSourceBuffer(type);
+            log('addSourceBuffer("' + type + '") ok');
+        } catch (error) {
+            log('addSourceBuffer("' + type + '") threw ' + describeError(error));
+            return;
+        }
+        try {
             const response = await fetch(MSE_URL);
+            if (!response.ok) {
+                log('fetch ' + MSE_URL + ' → HTTP ' + response.status);
+                return;
+            }
             const data = await response.arrayBuffer();
             await new Promise((resolve, reject) => {
                 sourceBuffer.addEventListener('updateend', resolve, { once: true });
-                sourceBuffer.addEventListener('error', reject, { once: true });
+                sourceBuffer.addEventListener('error', () => reject(new Error('SourceBuffer error event')), { once: true });
                 sourceBuffer.appendBuffer(data);
             });
-            mediaSource.endOfStream();
             log('appended ' + data.byteLength + ' bytes, buffered '
-                + (sourceBuffer.buffered.length ? sourceBuffer.buffered.end(0).toFixed(2) + 's' : 'nothing'));
+                + (sourceBuffer.buffered.length ? sourceBuffer.buffered.start(0).toFixed(2) + '–' + sourceBuffer.buffered.end(0).toFixed(2) + 's' : 'nothing')
+                + ', duration ' + video.duration);
+            mediaSource.endOfStream();
+            log('endOfStream, readyState ' + mediaSource.readyState
+                + (video.error ? ', element error ' + video.error.code : ''));
         } catch (error) {
-            log('MediaSource setup failed: ' + describeError(error));
+            log('append failed: ' + describeError(error)
+                + ' (mediaSource.readyState ' + mediaSource.readyState
+                + (video.error ? ', element error ' + video.error.code : '') + ')');
         }
     }, { once: true });
 }
@@ -144,7 +188,15 @@ function addLoopPanel(label, description, setup)
         logNode.scrollTop = logNode.scrollHeight;
     };
 
-    const state = { looping: false, iteration: 0, resolved: 0, rejected: 0, firstRejection: null, gestureTime: 0 };
+    const state = { looping: false, generation: 0, iteration: 0, resolved: 0, rejected: 0, firstRejection: null, gestureTime: 0, marks: [], windowStart: 0 };
+
+    // Timestamped events inside each iteration, so a short play window can be explained: a pause means
+    // something stopped playback, waiting/stalled means it ran out of data.
+    for (const type of ['play', 'playing', 'pause', 'waiting', 'stalled', 'seeking', 'seeked', 'ended', 'ratechange', 'emptied', 'error']) {
+        video.addEventListener(type, () => {
+            state.marks.push(type + '@' + Math.round(performance.now() - state.windowStart) + 'ms');
+        });
+    }
 
     function updateSummary()
     {
@@ -160,12 +212,19 @@ function addLoopPanel(label, description, setup)
         summaryNode.textContent = text;
     }
 
-    async function runLoop()
+    async function runLoop(generation)
     {
-        while (state.looping) {
+        // Stop then Start must not leave the previous loop alive: it would pause and seek the same element
+        // underneath the new one, cutting play windows short.
+        const running = () => state.looping && state.generation === generation;
+
+        while (running()) {
             state.iteration++;
+            state.marks = [];
+            state.windowStart = performance.now();
             const active = isActive();
             const afterGesture = ((performance.now() - state.gestureTime) / 1000).toFixed(1) + 's';
+            const before = video.currentTime;
             let outcome;
             try {
                 await video.play();
@@ -177,17 +236,33 @@ function addLoopPanel(label, description, setup)
                 if (!state.firstRejection)
                     state.firstRejection = { iteration: state.iteration, afterGesture, error: describeError(error) };
             }
-            log('#' + state.iteration + ' +' + afterGesture + ' isActive=' + active
-                + ' readyState=' + video.readyState + ' → ' + outcome
-                + ' (paused=' + video.paused + ' t=' + video.currentTime.toFixed(2) + ')');
             updateSummary();
 
-            if (!state.looping)
-                break;
-            await sleep(Math.max(0, parseInt(panel.querySelector('.playMs').value, 10) || 0));
+            // Let it run for the configured window, then measure how far it actually got.
+            const playMs = Math.max(0, parseInt(panel.querySelector('.playMs').value, 10) || 0);
+            if (outcome === 'resolved' && running())
+                await sleep(playMs);
+            const after = video.currentTime;
+            const alreadyPaused = video.paused;
             video.pause();
-            video.currentTime = 0;
-            if (!state.looping)
+            log('#' + state.iteration + ' +' + afterGesture + ' isActive=' + active
+                + ' readyState=' + video.readyState + ' → ' + outcome
+                + ', played ' + before.toFixed(2) + '→' + after.toFixed(2)
+                + ' (Δ' + (after - before).toFixed(2) + 's of a ' + (playMs / 1000).toFixed(2) + 's window'
+                + (alreadyPaused ? ', ALREADY PAUSED before the window ended' : '') + ')'
+                + (state.marks.length ? '\n    events: ' + state.marks.join(' ') : ''));
+
+            if (!running())
+                break;
+            // Wait for the seek to finish before the next play(): otherwise play() lands mid-seek.
+            if (video.currentTime > 0) {
+                const seekStart = performance.now();
+                video.currentTime = 0;
+                const how = await waitForEvent(video, 'seeked', 3000);
+                log('    seek to 0 ' + (how === 'event' ? 'completed' : 'TIMED OUT') + ' in '
+                    + Math.round(performance.now() - seekStart) + 'ms');
+            }
+            if (!running())
                 break;
             await sleep(Math.max(0, parseInt(panel.querySelector('.idleMs').value, 10) || 0));
         }
@@ -197,12 +272,18 @@ function addLoopPanel(label, description, setup)
     startButton.addEventListener('click', () => {
         if (state.looping)
             return;
+        // Load on demand: keeping three more players alive from page load competes with section B.
+        if (!state.setupDone) {
+            state.setupDone = true;
+            setup(video, log);
+        }
         state.looping = true;
+        state.generation++;
         state.gestureTime = performance.now();
         startButton.disabled = true;
         stopButton.disabled = false;
         log('gesture at ' + since() + ', isActive=' + isActive());
-        runLoop();
+        runLoop(state.generation);
     });
 
     stopButton.addEventListener('click', () => {
@@ -212,8 +293,6 @@ function addLoopPanel(label, description, setup)
     });
 
     setInterval(() => { if (state.looping) updateSummary(); }, 500);
-
-    setup(video, log);
 }
 
 addLoopPanel('MP4 file', 'Progressive download, src attribute.', video => { video.src = MP4; });
@@ -268,7 +347,8 @@ function addRow(title, desc, build, options)
     matrix.appendChild(row);
 
     const state = {
-        events: [], outcome: '—', activationAtCall: '—', everPlayed: false,
+        events: [], outcome: '—', activationAtCall: '—', everPlayed: false, pauses: [],
+        progressed: false, timeupdates: 0, maxTime: 0,
         // Scenarios that only start on a button press have no deadline until it is pressed.
         deadline: options && options.manual ? Infinity : performance.now() + START_DEADLINE_MS,
         probeInvisible: !!(options && options.probeInvisible),
@@ -287,9 +367,22 @@ function addRow(title, desc, build, options)
             }
             if (type === 'error')
                 probeHTTP(video, state);
+            if (type === 'pause')
+                state.pauses.push(video.currentTime.toFixed(2) + '/' + (isFinite(video.duration) ? video.duration.toFixed(2) : '?') + '@' + since());
             render();
         });
     }
+
+    // timeupdate is not in TRACKED_EVENTS because it fires several times a second and would drown the log;
+    // it is counted instead, since progress of currentTime is what "playback started" actually means.
+    video.addEventListener('timeupdate', () => {
+        state.timeupdates++;
+        if (video.currentTime > 0) {
+            state.progressed = true;
+            state.maxTime = Math.max(state.maxTime, video.currentTime);
+        }
+        render();
+    });
 
     if (window.IntersectionObserver) {
         // Seed synchronously: the observer's first callback may land after playback has begun.
@@ -325,11 +418,15 @@ function addRow(title, desc, build, options)
         }
         if (state.outcome.startsWith('REJECTED'))
             return { text: 'BLOCKED — play() rejected', cls: 'blocked' };
-        if (state.everPlayed) {
-            if (video.ended || !video.paused)
-                return { text: 'test passed', cls: 'played' };
-            return { text: 'FAILED — paused after starting, without reaching the end', cls: 'blocked' };
+        if (state.progressed) {
+            let text = 'test passed — playback progressed to ' + state.maxTime.toFixed(2) + 's';
+            // Not a failure of "did it start", but worth surfacing: something stopped it afterwards.
+            if (video.paused && !video.ended)
+                text += ' (then paused at ' + video.currentTime.toFixed(2) + 's)';
+            return { text, cls: 'played' };
         }
+        if (state.everPlayed)
+            return { text: 'FAILED — play/playing fired but currentTime never advanced', cls: 'blocked' };
         if (performance.now() < state.deadline)
             return { text: 'waiting to start…', cls: 'pending' };
         return { text: 'FAILED — never started playing', cls: 'blocked' };
@@ -337,14 +434,20 @@ function addRow(title, desc, build, options)
 
     function render()
     {
-        const result = verdict();
-        output.innerHTML = '<span class="verdict ' + result.cls + '">' + result.text + '</span>\n'
+        const result = state.frozen || verdict();
+        output.innerHTML = '<span class="verdict ' + result.cls + '">' + result.text + '</span>'
+            + (state.released ? ' <span class="ua">(media released to free a decoder)</span>' : '') + '\n'
             + 'paused=' + video.paused + ' ended=' + video.ended
             + ' readyState=' + video.readyState + ' (' + READY_STATE[video.readyState] + ')'
             + ' networkState=' + video.networkState + ' (' + NETWORK_STATE[video.networkState] + ')\n'
             + 'currentTime=' + video.currentTime.toFixed(2)
-            + ' muted=' + video.muted + ' volume=' + video.volume
+            + ' maxTime=' + state.maxTime.toFixed(2)
+            + ' timeupdates=' + state.timeupdates
+            + ' duration=' + (isFinite(video.duration) ? video.duration.toFixed(2) : String(video.duration))
+            + ' ended=' + video.ended + '\n'
+            + 'muted=' + video.muted + ' volume=' + video.volume
             + ' videoWidth=' + video.videoWidth + '\n'
+            + 'pauses (time/duration@elapsed): ' + (state.pauses.join(' ') || 'none') + '\n'
             + 'play() → ' + state.outcome + ' (isActive at call: ' + state.activationAtCall + ')\n'
             + 'currentSrc=' + (video.currentSrc || '(none)')
             + (state.httpProbe ? '\nserver said: ' + state.httpProbe : '') + '\n'
@@ -354,6 +457,29 @@ function addRow(title, desc, build, options)
     state.render = render;
     setInterval(render, 400);
     render();
+
+    // iOS has few concurrent decoders, and nine live players starve each other. Once a row's verdict is
+    // settled, freeze it and let go of the media. ?keep=1 disables this.
+    if (!state.probeInvisible && params.get('keep') !== '1') {
+        const releaseTimer = setInterval(() => {
+            const settled = state.progressed || state.outcome.startsWith('REJECTED') || video.error
+                || performance.now() > state.deadline;
+            if (!settled)
+                return;
+            clearInterval(releaseTimer);
+            // Give a moment for an immediate post-start pause to show up in the verdict first.
+            setTimeout(() => {
+                state.frozen = verdict();
+                state.released = true;
+                video.pause();
+                video.replaceChildren();
+                video.removeAttribute('src');
+                video.load();
+                render();
+            }, 2000);
+        }, 500);
+    }
+
     const entry = { video, state, title };
     rows.push(entry);
     return entry;
