@@ -42,7 +42,8 @@ rejected <i>after</i> the first activation. Section B runs on load and needs no 
 </p>
 
 <p>
-<label><input type="checkbox" id="unloadOnPass"> Unload each video as soon as its test settles (frees a decoder and speeds up page load)</label>
+<label><input type="checkbox" id="unloadOnPass"> Unload each video as soon as its test passes (frees a decoder and speeds up page load)</label>
+<span class="ua" id="unloadStatus"></span>
 </p>
 
 <h2>A. Repeat play() after one gesture — MP4, WebM, MediaSource</h2>
@@ -92,20 +93,40 @@ const since = () => ((performance.now() - startTime) / 1000).toFixed(2) + 's';
 const isActive = () => (navigator.userActivation ? navigator.userActivation.isActive : 'n/a');
 const describeError = error => (error && error.name ? error.name + ': ' + error.message : String(error));
 
-// Checked by default, remembered across reloads: a page holding a dozen loaded videos is slow to start and,
-// on iOS, competes for a small number of decoders.
+// Checked by default, remembered across reloads in localStorage: a page holding a dozen loaded videos is slow
+// to start and, on iOS, competes for a small number of decoders. The status next to the checkbox reports
+// whether the value was restored or defaulted.
 const UNLOAD_KEY = 'autoplay-policy.unloadOnPass';
 const unloadCheckbox = document.getElementById('unloadOnPass');
-try {
-    unloadCheckbox.checked = localStorage.getItem(UNLOAD_KEY) !== '0';
-} catch (error) {
-    unloadCheckbox.checked = true;
-}
-unloadCheckbox.addEventListener('change', () => {
+const unloadStatus = document.getElementById('unloadStatus');
+
+function readUnloadSetting()
+{
     try {
-        localStorage.setItem(UNLOAD_KEY, unloadCheckbox.checked ? '1' : '0');
-    } catch (error) { /* private browsing: the setting just will not persist */ }
-});
+        const stored = localStorage.getItem(UNLOAD_KEY);
+        if (stored !== null)
+            return { value: stored !== '0', from: 'localStorage' };
+    } catch (error) {
+        return { value: true, from: 'default (localStorage threw)' };
+    }
+    return { value: true, from: 'default (nothing stored)' };
+}
+
+function writeUnloadSetting(on)
+{
+    try {
+        localStorage.setItem(UNLOAD_KEY, on ? '1' : '0');
+        unloadStatus.textContent = localStorage.getItem(UNLOAD_KEY) === (on ? '1' : '0')
+            ? 'saved in localStorage' : 'write did not stick';
+    } catch (error) {
+        unloadStatus.textContent = 'could NOT be saved: ' + describeError(error);
+    }
+}
+
+const initialUnload = readUnloadSetting();
+unloadCheckbox.checked = initialUnload.value;
+unloadStatus.textContent = 'loaded from ' + initialUnload.from;
+unloadCheckbox.addEventListener('change', () => writeUnloadSetting(unloadCheckbox.checked));
 const shouldUnload = () => unloadCheckbox.checked;
 
 function unloadVideo(video)
@@ -459,8 +480,11 @@ function addRow(title, desc, build, options)
                 text += ' (then paused at ' + video.currentTime.toFixed(2) + 's)';
             return { text, cls: 'played' };
         }
-        if (state.everPlayed)
+        if (state.everPlayed) {
+            if (performance.now() < state.deadline)
+                return { text: 'started, waiting for currentTime to advance…', cls: 'pending' };
             return { text: 'FAILED — play/playing fired but currentTime never advanced', cls: 'blocked' };
+        }
         if (performance.now() < state.deadline)
             return { text: 'waiting to start…', cls: 'pending' };
         return { text: 'FAILED — never started playing', cls: 'blocked' };
@@ -492,16 +516,13 @@ function addRow(title, desc, build, options)
     setInterval(render, 400);
     render();
 
-    // Once a row's verdict is settled, optionally freeze it and let go of the media. These scenarios only ask
-    // whether playback started; what happens to playback afterwards is section A's job, and those panels never
-    // unload while looping. Left unchecked, the element is untouched and simply keeps playing.
+    // Unload only once the test has passed, never on failure: a row that has not played yet must keep its
+    // media, both to stay inspectable and because it may still start. These scenarios only ask whether
+    // playback started; what happens afterwards is section A's job, and those panels never unload while
+    // looping. Left unchecked, the element is untouched and simply keeps playing.
     if (!state.probeInvisible) {
         const releaseTimer = setInterval(() => {
-            if (!shouldUnload())
-                return;
-            const settled = state.progressed || state.outcome.startsWith('REJECTED') || video.error
-                || performance.now() > state.deadline;
-            if (!settled)
+            if (!shouldUnload() || !state.progressed)
                 return;
             clearInterval(releaseTimer);
             state.frozen = verdict();
