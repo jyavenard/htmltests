@@ -38,7 +38,8 @@
 Every video here is <code>muted playsinline</code>.
 Section A is gesture-driven: press <b>Start test</b> and it loops <code>play()</code> → wait → <code>pause()</code> →
 seek to 0 → repeat, logging every rejection, so you can see whether a <code>play()</code> promise is ever
-rejected <i>after</i> the first activation. Section B runs on load and needs no interaction.
+rejected <i>after</i> the first activation. Section B runs on load and needs no interaction, except that on
+iOS nothing starts or buffers while off screen — scroll each row into view.
 </p>
 
 <p>
@@ -46,7 +47,7 @@ rejected <i>after</i> the first activation. Section B runs on load and needs no 
 <span class="ua" id="unloadStatus"></span>
 </p>
 
-<h2>A. Repeat play() after one gesture — MP4, WebM, MediaSource</h2>
+<h2>A. Repeat play() after one gesture — MP4, WebM, Managed/MediaSource</h2>
 <div class="panels" id="panels"></div>
 
 <h2>B. Scenario matrix (runs on load, no gesture)</h2>
@@ -156,21 +157,34 @@ function waitForEvent(target, type, timeoutMs)
 
 // ---------------------------------------------------------------- section A
 
+// ManagedMediaSource where it exists — plain MediaSource is not exposed on iPhone. It is a MediaSource
+// subclass, so everything below works for either; isTypeSupported forwards to MediaSource's.
+const MSE_CLASS = window.ManagedMediaSource || window.MediaSource;
+const MSE_IS_MANAGED = !!window.ManagedMediaSource;
+
 function attachMediaSource(video, log)
 {
-    if (!window.MediaSource) {
-        log('MediaSource is not available');
+    if (!MSE_CLASS) {
+        log('neither ManagedMediaSource nor MediaSource is available');
         return;
     }
+    log('using ' + (MSE_IS_MANAGED ? 'ManagedMediaSource' : 'MediaSource'));
     for (const type of MSE_TYPES)
-        log('isTypeSupported("' + type + '") = ' + MediaSource.isTypeSupported(type));
-    const type = MSE_TYPES.find(candidate => MediaSource.isTypeSupported(candidate));
+        log('isTypeSupported("' + type + '") = ' + MSE_CLASS.isTypeSupported(type));
+    const type = MSE_TYPES.find(candidate => MSE_CLASS.isTypeSupported(candidate));
     if (!type) {
         log('no candidate type is supported, giving up');
         return;
     }
 
-    const mediaSource = new MediaSource();
+    const mediaSource = new MSE_CLASS();
+    // ManagedMediaSource needs either remote playback disabled on the element or an alternative source that can
+    // be AirPlayed, otherwise it never opens.
+    video.setAttribute('disableremoteplayback', '');
+    if (MSE_IS_MANAGED) {
+        mediaSource.addEventListener('startstreaming', () => log('startstreaming'));
+        mediaSource.addEventListener('endstreaming', () => log('endstreaming'));
+    }
     video.src = URL.createObjectURL(mediaSource);
     mediaSource.addEventListener('sourceopen', async () => {
         let sourceBuffer;
@@ -352,7 +366,7 @@ function addLoopPanel(label, description, setup)
 
 addLoopPanel('MP4 file', 'Progressive download, src attribute.', video => { video.src = MP4; });
 addLoopPanel('WebM file', 'Progressive download, VP9.', video => { video.src = WEBM; });
-addLoopPanel('MediaSource', 'Fragmented MP4 appended into a SourceBuffer.', attachMediaSource);
+addLoopPanel(MSE_IS_MANAGED ? 'ManagedMediaSource' : 'MediaSource', 'Fragmented MP4 appended into a SourceBuffer.', attachMediaSource);
 
 // ---------------------------------------------------------------- section B
 
@@ -485,6 +499,8 @@ function addRow(title, desc, build, options)
                 return { text: 'started, waiting for currentTime to advance…', cls: 'pending' };
             return { text: 'FAILED — play/playing fired but currentTime never advanced', cls: 'blocked' };
         }
+        if (!state.isVisible)
+            return { text: 'off screen — scroll to it (iOS does not start or buffer invisible videos)', cls: 'pending' };
         if (performance.now() < state.deadline)
             return { text: 'waiting to start…', cls: 'pending' };
         return { text: 'FAILED — never started playing', cls: 'blocked' };
@@ -492,6 +508,11 @@ function addRow(title, desc, build, options)
 
     function render()
     {
+        // On iOS nothing off screen autoplays or even buffers, so a row that has not been scrolled to yet is
+        // not a failure: hold its deadline while it is out of view. Row 9 is exempt, invisibility is its test.
+        if (!state.probeInvisible && !state.isVisible && !state.progressed && isFinite(state.deadline))
+            state.deadline = performance.now() + START_DEADLINE_MS;
+
         const result = state.frozen || verdict();
         output.innerHTML = '<span class="verdict ' + result.cls + '">' + result.text + '</span>'
             + (state.released ? ' <span class="ua">(media released to free a decoder)</span>' : '') + '\n'
@@ -611,8 +632,8 @@ const row5 = addRow('5. script-created element, then play()',
     });
 
 // 6. MediaSource, autoplay attribute.
-const row6 = addRow('6. autoplay attribute, MediaSource',
-    'Parsed markup with autoplay; a fragmented MP4 is appended once the source opens.',
+const row6 = addRow('6. autoplay attribute, ' + (MSE_IS_MANAGED ? 'ManagedMediaSource' : 'MediaSource'),
+    'Parsed markup with autoplay; a fragmented MP4 is appended once the source opens. Remote playback is disabled on the element, which ManagedMediaSource requires in order to open at all.',
     () => markupVideo('<video muted playsinline autoplay controls></video>'));
 if (!row6.state.skipped)
     attachMediaSource(row6.video, line => { row6.state.events.push('[mse] ' + line); row6.state.render(); });
