@@ -50,8 +50,12 @@ NetworkProcess, with no coalescing in between:
 </table>
 <div id="verdicts"></div>
 
-<p class="note">Run one tab only: the streaming state is aggregated across the whole process pool,
-so any other media tab pollutes the result.</p>
+<p class="note"><strong>Nothing else may be streaming in this browser.</strong>
+<code>WebProcessPool::updateMediaStreamingActivity</code> notifies only when its count of processes with
+media streaming crosses zero, so any other page holding that state keeps the count above zero and
+every transition this page makes is dropped before it reaches the NetworkProcess. The counters below
+still fill in, because they come from the <code>ManagedMediaSource</code> events upstream of that
+gate — so full page-visible churn with no notifications at all means something else is streaming.</p>
 
 <h2>Log</h2>
 <pre id="log"></pre>
@@ -76,6 +80,15 @@ const MANIFESTS = [
 const CASE2_PASS_LENGTH = 9.5;
 const CASE2_PASSES = 5;
 const CASE2_BUFFERED_TARGET = 1;
+// Seconds left buffered ahead of the other target. Under ManagedMediaSourceLowThreshold (10s), so
+// the algorithm asks for more data, while staying inside the buffered range so the seek completes
+// without needing any.
+const CASE2_REMAINING_AHEAD = 2;
+// The whole burst fits inside one 10s notification window. Idling for longer than the window before
+// it starts means the window is open when the first transition arrives, so that one publishes
+// immediately and the value the burst settles on publishes when the window closes: two
+// notifications, 10s apart, whatever the state left over from a previous run.
+const CASE2_WINDOW_IDLE_MS = 11000;
 
 // Both cases trim the append to a round number of seconds. Audio samples are divisible, so
 // SourceBufferPrivate splits the sample straddling appendWindowEnd and the buffered range ends
@@ -265,6 +278,19 @@ async function settle(target) {
     logLine(`SETTLE: ${streamingState()}`);
 }
 
+// Seeks to `target`, which must be inside the buffered range, and waits for both the seek and the
+// streaming event the buffering policy owes at that position.
+async function seekAwaitingStreaming(iteration, target, event) {
+    const streamingEvent = waitFor(source, event);
+    const seeked = waitFor(video, 'seeked');
+    video.currentTime = target;
+    try {
+        await Promise.all([seeked, streamingEvent]);
+    } catch (error) {
+        throw new Error(`iteration ${iteration} seeking to ${target.toFixed(3)} awaiting '${event}': ${error.message}. ${streamingState()} networkState=${video.networkState} seeking=${video.seeking}`);
+    }
+}
+
 // Case 1: repeatedly seek to duration on an ended ManagedMediaSource.
 //
 // Two independent defects are visible here. monitorSourceBuffers had no end-of-media early exit, so
@@ -322,14 +348,15 @@ async function case1(iterations) {
         verdict('buggy', `Case 1 ended BUG PRESENT: 'ended' fired ${counts.ended} times over ${counts.seeked} seeks.`);
 }
 
-// Case 2: alternate between a seek past the buffered data and a seek back into a zone that
-// satisfies the buffering policy.
+// Case 2: alternate between a seek that leaves less than the low threshold buffered ahead and a seek
+// back into a zone that satisfies the high threshold.
 //
-// The source stays open, so monitorSourceBuffers does not clamp limitAhead() to duration: the return
-// leg fires endstreaming because [target, target + 30s] is genuinely buffered, which is the
-// condition a real player meets when a viewer scrubs back into a filled buffer. The churn is correct
-// behaviour and stays page-visible; only the NetworkProcess rate-limits the resulting notifications,
-// which JS cannot observe.
+// Both targets sit inside the buffered range, so both seeks complete on their own and the loop never
+// waits on a seek that needs data to arrive. The source stays open, so monitorSourceBuffers does not
+// clamp limitAhead() to duration: the near-the-end target fires startstreaming because
+// [target, target + 10s] is not buffered, and the return leg fires endstreaming because
+// [target, target + 30s] is. The churn is correct behaviour and stays page-visible; only the
+// NetworkProcess rate-limits the resulting notifications, which JS cannot observe.
 async function case2(iterations) {
     const loader = await pickLoader(CASE2_PASS_LENGTH);
     if (!loader) {
@@ -364,43 +391,22 @@ async function case2(iterations) {
         verdict('buggy', `Only ${bufferedEnd.toFixed(3)}s buffered: not enough to satisfy the 30s policy ahead of ${CASE2_BUFFERED_TARGET}s.`);
         return;
     }
-    const unbufferedTarget = bufferedEnd + 5;
-    if (unbufferedTarget > video.duration - 1) {
-        verdict('buggy', `Unbuffered target ${unbufferedTarget.toFixed(3)} is not inside the seekable range [0, ${video.duration}].`);
+    const nearEndTarget = bufferedEnd - CASE2_REMAINING_AHEAD;
+    if (nearEndTarget <= CASE2_BUFFERED_TARGET) {
+        verdict('buggy', `Near-end target ${nearEndTarget.toFixed(3)} is not past the buffered target ${CASE2_BUFFERED_TARGET}.`);
         return;
     }
     await settle(CASE2_BUFFERED_TARGET);
 
+    logLine(`CASE 2: idling ${CASE2_WINDOW_IDLE_MS / 1000}s so the notification window is open before the burst`);
+    await new Promise(resolve => setTimeout(resolve, CASE2_WINDOW_IDLE_MS));
+
     const before = snapshot();
-    logLine(`CASE 2 START: ${iterations} round trips between unbuffered ${unbufferedTarget.toFixed(3)} and buffered ${CASE2_BUFFERED_TARGET}`);
+    logLine(`CASE 2 START: ${iterations} round trips between ${nearEndTarget.toFixed(3)} (${CASE2_REMAINING_AHEAD}s buffered ahead) and ${CASE2_BUFFERED_TARGET} (${(bufferedEnd - CASE2_BUFFERED_TARGET).toFixed(3)}s ahead)`);
 
     for (let i = 0; i < iterations; i++) {
-        if (source.streaming) {
-            verdict('buggy', `Case 2 stopped at iteration ${i}: streaming was already true before the unbuffered seek, so no startstreaming can follow. currentTime=${video.currentTime} readyState=${video.readyState} buffered=${rangesToString(sourceBuffer.buffered)}`);
-            break;
-        }
-        const started = waitFor(source, 'startstreaming');
-        video.currentTime = unbufferedTarget;
-        try {
-            await started;
-        } catch (error) {
-            // 321919 (a3af5da09b5c, 17 Aug 2026) restored the monitorSourceBuffers() call in
-            // MediaSourcePrivate::waitForTarget and made currentTime() return the pending seek
-            // target. Without it the algorithm reads the renderer's time, which is always buffered,
-            // so nothing lowers readyState or asks for data and the seek never starts.
-            if (video.seeking && !source.streaming && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-                verdict('buggy', `Case 2 cannot run on this build: seeking to unbuffered ${unbufferedTarget.toFixed(3)} left readyState at ${video.readyState} with seeking=true and no startstreaming. That is https://bugs.webkit.org/show_bug.cgi?id=321919 — 'startstreaming' is not emitted when seeking — fixed in a3af5da09b5c, which predates the fix under test, so this build has neither.`);
-                return;
-            }
-            throw new Error(`iteration ${i} seeking to unbuffered ${unbufferedTarget.toFixed(3)}: ${error.message}. A timeout here is usually https://bugs.webkit.org/show_bug.cgi?id=321919 ('startstreaming' is not emitted when seeking, fixed in a3af5da09b5c). ${streamingState()} networkState=${video.networkState} seeking=${video.seeking} seekable=${rangesToString(video.seekable)}`);
-        }
-
-        const stopped = waitFor(source, 'endstreaming');
-        const seeked = waitFor(video, 'seeked');
-        video.currentTime = CASE2_BUFFERED_TARGET;
-        await Promise.all([seeked, stopped]).catch(error => {
-            throw new Error(`iteration ${i} seeking back to buffered ${CASE2_BUFFERED_TARGET}: ${error.message}. currentTime=${video.currentTime} readyState=${video.readyState} seeking=${video.seeking} streaming=${source.streaming} buffered=${rangesToString(sourceBuffer.buffered)}`);
-        });
+        await seekAwaitingStreaming(i, nearEndTarget, 'startstreaming');
+        await seekAwaitingStreaming(i, CASE2_BUFFERED_TARGET, 'endstreaming');
     }
 
     await drainEvents();
