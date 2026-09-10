@@ -84,11 +84,6 @@ const CASE2_BUFFERED_TARGET = 1;
 // the algorithm asks for more data, while staying inside the buffered range so the seek completes
 // without needing any.
 const CASE2_REMAINING_AHEAD = 2;
-// The whole burst fits inside one 10s notification window. Idling for longer than the window before
-// it starts means the window is open when the first transition arrives, so that one publishes
-// immediately and the value the burst settles on publishes when the window closes: two
-// notifications, 10s apart, whatever the state left over from a previous run.
-const CASE2_WINDOW_IDLE_MS = 11000;
 
 // Both cases trim the append to a round number of seconds. Audio samples are divisible, so
 // SourceBufferPrivate splits the sample straddling appendWindowEnd and the buffered range ends
@@ -397,9 +392,6 @@ async function case2(iterations) {
         return;
     }
     await settle(CASE2_BUFFERED_TARGET);
-
-    logLine(`CASE 2: idling ${CASE2_WINDOW_IDLE_MS / 1000}s so the notification window is open before the burst`);
-    await new Promise(resolve => setTimeout(resolve, CASE2_WINDOW_IDLE_MS));
 
     const before = snapshot();
     logLine(`CASE 2 START: ${iterations} round trips between ${nearEndTarget.toFixed(3)} (${CASE2_REMAINING_AHEAD}s buffered ahead) and ${CASE2_BUFFERED_TARGET} (${(bufferedEnd - CASE2_BUFFERED_TARGET).toFixed(3)}s ahead)`);
