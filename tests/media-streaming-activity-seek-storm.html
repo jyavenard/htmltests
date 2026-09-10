@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ManagedMediaSource seek storm — bug 322488 / 319847@main</title>
+<style>
+    body { font-family: -apple-system, sans-serif; margin: 16px; }
+    h1 { font-size: 18px; }
+    h2 { font-size: 15px; margin-top: 20px; }
+    video { width: 320px; height: 60px; background: #000; }
+    #controls { margin: 12px 0; }
+    button { font-size: 13px; padding: 4px 10px; }
+    table { border-collapse: collapse; margin: 8px 0; font: 12px monospace; }
+    th, td { border: 1px solid #ccc; padding: 2px 8px; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    .verdict { font: 13px monospace; padding: 6px 8px; margin: 4px 0; border-left: 4px solid #999; }
+    .verdict.fixed { border-color: #2a2; background: #f0fff0; }
+    .verdict.buggy { border-color: #c00; background: #fff0f0; }
+    .verdict.info { border-color: #48c; background: #f0f6ff; }
+    #log { font: 11px monospace; background: #f7f7f7; padding: 8px; height: 320px; overflow: auto; white-space: pre; }
+    p.note { max-width: 62em; font-size: 13px; }
+</style>
+<script src="media-source-loader.js"></script>
+</head>
+<body>
+
+<h1>ManagedMediaSource seek storms</h1>
+
+<p class="note">
+Repro page for <a href="https://commits.webkit.org/319847@main">319847@main</a> (bug 322488,
+<code>cab391584f80</code>). Each <code>startstreaming</code>/<code>endstreaming</code> event reported
+below is one media-state transition delivered from WebCore to the UIProcess and on to the
+NetworkProcess, with no coalescing in between:
+<code>ManagedMediaSource::setStreaming</code> → <code>HasStreamingActivity</code> →
+<code>WebProcessProxy::updateMediaStreamingActivity</code>.
+</p>
+
+<div id="controls">
+    Iterations: <input id="iterations" type="number" value="20" min="1" max="500" style="width: 5em">
+    <button id="case1Button">Case 1: seek to end</button>
+    <button id="case2Button">Case 2: buffered &harr; unbuffered</button>
+    <button id="bothButton">Run both</button>
+</div>
+
+<video controls></video>
+
+<h2>Counters</h2>
+<table id="counters">
+    <tr><th>event</th><th>case 1</th><th>case 2</th></tr>
+</table>
+<div id="verdicts"></div>
+
+<p class="note">Run one tab only: the streaming state is aggregated across the whole process pool,
+so any other media tab pollutes the result.</p>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script>
+// Same content and fallback order as media/media-source/media-managedmse-no-streaming-toggle-at-end.html,
+// the layout test added with the fix. Single-track audio: duration comes from the one track the seek
+// resolves against, so seeking to duration lands on duration.
+const MANIFESTS = [
+    'content/test-opus-manifest.json',
+    'content/test-vorbis-manifest.json',
+    'content/test-48khz-manifest.json',
+    'content/test-xhe-aac-manifest.json',
+];
+
+// Case 2 needs the buffering policy satisfiable without the source being ended, which takes more
+// than ManagedMediaSourceHighThreshold (30s) of contiguous data ahead of the seek target:
+// ManagedMediaSource::monitorSourceBuffers only clamps limitAhead() to duration once ended.
+// No asset here holds that much in one run — test-opus.webm spans 90s but its media stops at 10s
+// and resumes at 80s — so the range is built from CASE2_PASSES copies of the opening
+// CASE2_PASS_LENGTH seconds.
+const CASE2_PASS_LENGTH = 9.5;
+const CASE2_PASSES = 5;
+const CASE2_BUFFERED_TARGET = 1;
+
+// Both cases trim the append to a round number of seconds. Audio samples are divisible, so
+// SourceBufferPrivate splits the sample straddling appendWindowEnd and the buffered range ends
+// exactly there. A value this coarse survives the seek path unchanged, which case 1 needs: its two
+// defects and the fix for them all hinge on currentTime reaching duration exactly.
+const CASE1_APPEND_WINDOW_END = 4.5;
+
+const TIMEOUT = 5000;
+const COUNTED_EVENTS = ['startstreaming', 'endstreaming', 'ended', 'seeking', 'seeked', 'waiting'];
+
+let video;
+let source;
+let sourceBuffer;
+let running = false;
+const counters = {};
+const caseCounts = { 1: null, 2: null };
+
+function pad(value, width) {
+    return String(value).padStart(width, '0');
+}
+
+function logLine(message) {
+    const now = new Date();
+    const stamp = `${pad(now.getHours(), 2)}:${pad(now.getMinutes(), 2)}:${pad(now.getSeconds(), 2)}.${pad(now.getMilliseconds(), 3)}`;
+    const log = document.getElementById('log');
+    const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+    log.appendChild(document.createTextNode(`${stamp}  ${message}\n`));
+    if (atBottom)
+        log.scrollTop = log.scrollHeight;
+}
+
+function renderCounters() {
+    const table = document.getElementById('counters');
+    while (table.rows.length > 1)
+        table.deleteRow(1);
+    for (const name of COUNTED_EVENTS) {
+        const row = table.insertRow();
+        row.insertCell().textContent = name;
+        for (const which of [1, 2])
+            row.insertCell().textContent = caseCounts[which] ? caseCounts[which][name] : '-';
+    }
+}
+
+function verdict(kind, message) {
+    const div = document.createElement('div');
+    div.className = `verdict ${kind}`;
+    div.textContent = message;
+    document.getElementById('verdicts').appendChild(div);
+    logLine(`VERDICT: ${message}`);
+}
+
+function waitFor(target, name, timeout = TIMEOUT) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            target.removeEventListener(name, handler);
+            reject(new Error(`timed out after ${timeout}ms waiting for '${name}'`));
+        }, timeout);
+        function handler(event) {
+            clearTimeout(timer);
+            target.removeEventListener(name, handler);
+            resolve(event);
+        }
+        target.addEventListener(name, handler);
+    });
+}
+
+function snapshot() {
+    const values = {};
+    for (const name of COUNTED_EVENTS)
+        values[name] = counters[name] || 0;
+    return values;
+}
+
+function delta(before) {
+    const values = {};
+    for (const name of COUNTED_EVENTS)
+        values[name] = (counters[name] || 0) - before[name];
+    return values;
+}
+
+function rangesToString(ranges) {
+    let text = '';
+    for (let i = 0; i < ranges.length; i++)
+        text += `[${ranges.start(i).toFixed(3)}, ${ranges.end(i).toFixed(3)}) `;
+    return text.trim() || '(empty)';
+}
+
+function countEvents(target, names) {
+    for (const name of names) {
+        target.addEventListener(name, () => {
+            counters[name] = (counters[name] || 0) + 1;
+        });
+    }
+}
+
+// The last iteration's events are queued, not dispatched, when its 'seeked' resolves. Let the queue
+// run before sampling so the counts cover every iteration.
+function drainEvents() {
+    return new Promise(resolve => setTimeout(resolve, 250));
+}
+
+// Every input ManagedMediaSource::monitorSourceBuffers reads, so a run that does not toggle as
+// expected shows which branch it took.
+function streamingState() {
+    return `streaming=${source.streaming} activeSourceBuffers=${source.activeSourceBuffers.length}`
+        + ` sourceReadyState=${source.readyState} currentTime=${video.currentTime}`
+        + ` duration=${video.duration} readyState=${video.readyState}`
+        + ` buffered=${rangesToString(sourceBuffer.buffered)}`;
+}
+
+function logStreamingEvents() {
+    for (const name of ['startstreaming', 'endstreaming'])
+        source.addEventListener(name, () => logLine(`  ${name}: ${streamingState()}`));
+}
+
+function loaderPromise(loader) {
+    return new Promise((resolve, reject) => {
+        loader.onload = resolve;
+        loader.onerror = () => reject(new Error('failed to load manifest or media data'));
+    });
+}
+
+// Returns the first manifest whose type ManagedMediaSource supports and whose duration is at least
+// `minimumDuration`.
+async function pickLoader(minimumDuration) {
+    for (const manifest of MANIFESTS) {
+        const loader = new MediaSourceLoader(manifest);
+        try {
+            await loaderPromise(loader);
+        } catch (error) {
+            logLine(`LOAD: ${manifest} unavailable (${error.message})`);
+            continue;
+        }
+        if (!ManagedMediaSource.isTypeSupported(loader.type())) {
+            logLine(`LOAD: ${manifest} type '${loader.type()}' unsupported`);
+            continue;
+        }
+        if (loader.duration() < minimumDuration) {
+            logLine(`LOAD: ${manifest} is only ${loader.duration()}s, needs ${minimumDuration}s`);
+            continue;
+        }
+        logLine(`LOAD: using ${manifest}, type '${loader.type()}', duration ${loader.duration()}s, ${loader.mediaSegmentsLength()} segments`);
+        return loader;
+    }
+    return null;
+}
+
+async function appendBuffer(buffer) {
+    const updated = waitFor(sourceBuffer, 'update', 20000);
+    sourceBuffer.appendBuffer(buffer);
+    await updated;
+}
+
+// Replaces the media element and attaches a fresh ManagedMediaSource with `loader`'s init segment
+// appended. Leaves the source open with no media data.
+async function attach(loader) {
+    for (const name of COUNTED_EVENTS)
+        counters[name] = 0;
+
+    const oldVideo = document.querySelector('video');
+    video = document.createElement('video');
+    video.controls = true;
+    // ManagedMediaSource refuses to attach without either an AirPlay alternative source or the
+    // Remote Playback API explicitly disabled.
+    video.disableRemotePlayback = true;
+    oldVideo.replaceWith(video);
+
+    source = new ManagedMediaSource();
+    countEvents(source, ['startstreaming', 'endstreaming']);
+    countEvents(video, ['ended', 'seeking', 'seeked', 'waiting']);
+    video.addEventListener('error', () => logLine(`ERROR: video error ${video.error && video.error.message}`));
+
+    video.src = URL.createObjectURL(source);
+    await waitFor(source, 'sourceopen');
+    sourceBuffer = source.addSourceBuffer(loader.type());
+    logStreamingEvents();
+    await appendBuffer(loader.initSegment());
+}
+
+// Drives `streaming` to false and parks currentTime on `target`, so a case starts from a known
+// state. `target` must satisfy the buffering policy.
+async function settle(target) {
+    const stopped = source.streaming ? waitFor(source, 'endstreaming') : Promise.resolve();
+    const seeked = waitFor(video, 'seeked');
+    video.currentTime = target;
+    await Promise.all([seeked, stopped]);
+    logLine(`SETTLE: ${streamingState()}`);
+}
+
+// Case 1: repeatedly seek to duration on an ended ManagedMediaSource.
+//
+// Two independent defects are visible here. monitorSourceBuffers had no end-of-media early exit, so
+// each seek flipped streaming true then false; and seekTask cleared m_sentEndEvent on every seek, so
+// 'ended' fired again each time. Both counts are reported separately.
+async function case1(iterations) {
+    const loader = await pickLoader(0);
+    if (!loader) {
+        verdict('buggy', 'No supported manifest: case 1 cannot run.');
+        return;
+    }
+    await attach(loader);
+
+    sourceBuffer.appendWindowEnd = CASE1_APPEND_WINDOW_END;
+    await appendBuffer(loader.mediaSegment(0));
+    source.duration = sourceBuffer.buffered.end(0);
+    await waitFor(video, 'durationchange').catch(() => { });
+    source.endOfStream();
+    logLine(`CASE 1 SETUP: ${streamingState()}`);
+    if (video.duration !== CASE1_APPEND_WINDOW_END)
+        verdict('info', `Case 1: duration is ${video.duration}, not the requested ${CASE1_APPEND_WINDOW_END}. The append window did not trim the last sample, so currentTime may not reach duration exactly.`);
+    await settle(0);
+
+    const before = snapshot();
+    logLine(`CASE 1 START: ${iterations} seeks to duration (${video.duration})`);
+    for (let i = 0; i < iterations; i++) {
+        const seeked = waitFor(video, 'seeked');
+        video.currentTime = video.duration;
+        await seeked;
+    }
+
+    await drainEvents();
+    const counts = delta(before);
+    caseCounts[1] = counts;
+    renderCounters();
+    logLine(`CASE 1 END: currentTime=${video.currentTime} duration=${video.duration} ended=${video.ended} streaming=${source.streaming}`);
+
+    if (counts.seeked !== iterations)
+        verdict('info', `Case 1: only ${counts.seeked} of ${iterations} seeks completed.`);
+
+    // Both defects need the playback position to reach duration. If the seek lands short, neither
+    // the buggy path nor the fixed path runs and the counts below mean nothing.
+    if (video.currentTime < video.duration)
+        verdict('buggy', `Case 1 SETUP FAILED: after seeking to duration, currentTime is ${video.currentTime}, short of duration ${video.duration}. The position never reaches end of media, so this run tests neither the defect nor the fix.`);
+
+    const streamingEvents = counts.startstreaming + counts.endstreaming;
+    if (!streamingEvents)
+        verdict('fixed', `Case 1 streaming FIXED: ${counts.seeked} seeks to duration produced 0 streaming events. A pre-fix build produces ${2 * iterations}.`);
+    else
+        verdict('buggy', `Case 1 streaming BUG PRESENT: ${counts.startstreaming} startstreaming + ${counts.endstreaming} endstreaming over ${counts.seeked} seeks.`);
+
+    if (counts.ended === 1)
+        verdict('fixed', `Case 1 ended FIXED: 'ended' fired once over ${counts.seeked} seeks. A pre-fix build fires it ${iterations} times.`);
+    else
+        verdict('buggy', `Case 1 ended BUG PRESENT: 'ended' fired ${counts.ended} times over ${counts.seeked} seeks.`);
+}
+
+// Case 2: alternate between a seek past the buffered data and a seek back into a zone that
+// satisfies the buffering policy.
+//
+// The source stays open, so monitorSourceBuffers does not clamp limitAhead() to duration: the return
+// leg fires endstreaming because [target, target + 30s] is genuinely buffered, which is the
+// condition a real player meets when a viewer scrubs back into a filled buffer. The churn is correct
+// behaviour and stays page-visible; only the NetworkProcess rate-limits the resulting notifications,
+// which JS cannot observe.
+async function case2(iterations) {
+    const loader = await pickLoader(CASE2_PASS_LENGTH);
+    if (!loader) {
+        verdict('buggy', `No supported manifest of at least ${CASE2_PASS_LENGTH}s: case 2 cannot run.`);
+        return;
+    }
+    await attach(loader);
+
+    // None of these assets holds 30s in one contiguous run, so build one: append the opening
+    // CASE2_PASS_LENGTH seconds repeatedly, each pass offset to start where the previous one ended.
+    // appendWindowEnd trims the straddling audio sample exactly, so the passes join without a gap
+    // and the buffered range ends on a round number.
+    for (let pass = 0; pass < CASE2_PASSES; pass++) {
+        sourceBuffer.timestampOffset = pass * CASE2_PASS_LENGTH;
+        sourceBuffer.appendWindowEnd = (pass + 1) * CASE2_PASS_LENGTH;
+        for (let i = 0; i < loader.mediaSegmentsLength(); i++) {
+            if (i && loader.mediaSegmentEndTime(i - 1) >= CASE2_PASS_LENGTH)
+                break;
+            await appendBuffer(loader.mediaSegment(i));
+        }
+        logLine(`CASE 2 SETUP: pass ${pass + 1}/${CASE2_PASSES}, buffered=${rangesToString(sourceBuffer.buffered)}`);
+    }
+    source.duration = CASE2_PASS_LENGTH * CASE2_PASSES + 20;
+    logLine(`CASE 2 SETUP: ${streamingState()}`);
+
+    if (sourceBuffer.buffered.length !== 1) {
+        verdict('buggy', `Expected one contiguous buffered range, got ${rangesToString(sourceBuffer.buffered)}.`);
+        return;
+    }
+    const bufferedEnd = sourceBuffer.buffered.end(0);
+    if (bufferedEnd < CASE2_BUFFERED_TARGET + 31) {
+        verdict('buggy', `Only ${bufferedEnd.toFixed(3)}s buffered: not enough to satisfy the 30s policy ahead of ${CASE2_BUFFERED_TARGET}s.`);
+        return;
+    }
+    const unbufferedTarget = bufferedEnd + 5;
+    if (unbufferedTarget > video.duration - 1) {
+        verdict('buggy', `Unbuffered target ${unbufferedTarget.toFixed(3)} is not inside the seekable range [0, ${video.duration}].`);
+        return;
+    }
+    await settle(CASE2_BUFFERED_TARGET);
+
+    const before = snapshot();
+    logLine(`CASE 2 START: ${iterations} round trips between unbuffered ${unbufferedTarget.toFixed(3)} and buffered ${CASE2_BUFFERED_TARGET}`);
+
+    for (let i = 0; i < iterations; i++) {
+        if (source.streaming) {
+            verdict('buggy', `Case 2 stopped at iteration ${i}: streaming was already true before the unbuffered seek, so no startstreaming can follow. currentTime=${video.currentTime} readyState=${video.readyState} buffered=${rangesToString(sourceBuffer.buffered)}`);
+            break;
+        }
+        const started = waitFor(source, 'startstreaming');
+        video.currentTime = unbufferedTarget;
+        try {
+            await started;
+        } catch (error) {
+            // 321919 (a3af5da09b5c, 17 Aug 2026) restored the monitorSourceBuffers() call in
+            // MediaSourcePrivate::waitForTarget and made currentTime() return the pending seek
+            // target. Without it the algorithm reads the renderer's time, which is always buffered,
+            // so nothing lowers readyState or asks for data and the seek never starts.
+            if (video.seeking && !source.streaming && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+                verdict('buggy', `Case 2 cannot run on this build: seeking to unbuffered ${unbufferedTarget.toFixed(3)} left readyState at ${video.readyState} with seeking=true and no startstreaming. That is https://bugs.webkit.org/show_bug.cgi?id=321919 — 'startstreaming' is not emitted when seeking — fixed in a3af5da09b5c, which predates the fix under test, so this build has neither.`);
+                return;
+            }
+            throw new Error(`iteration ${i} seeking to unbuffered ${unbufferedTarget.toFixed(3)}: ${error.message}. A timeout here is usually https://bugs.webkit.org/show_bug.cgi?id=321919 ('startstreaming' is not emitted when seeking, fixed in a3af5da09b5c). ${streamingState()} networkState=${video.networkState} seeking=${video.seeking} seekable=${rangesToString(video.seekable)}`);
+        }
+
+        const stopped = waitFor(source, 'endstreaming');
+        const seeked = waitFor(video, 'seeked');
+        video.currentTime = CASE2_BUFFERED_TARGET;
+        await Promise.all([seeked, stopped]).catch(error => {
+            throw new Error(`iteration ${i} seeking back to buffered ${CASE2_BUFFERED_TARGET}: ${error.message}. currentTime=${video.currentTime} readyState=${video.readyState} seeking=${video.seeking} streaming=${source.streaming} buffered=${rangesToString(sourceBuffer.buffered)}`);
+        });
+    }
+
+    await drainEvents();
+    const counts = delta(before);
+    caseCounts[2] = counts;
+    renderCounters();
+    logLine(`CASE 2 END: currentTime=${video.currentTime} streaming=${source.streaming}`);
+
+    const streamingEvents = counts.startstreaming + counts.endstreaming;
+    verdict('info', `Case 2: ${counts.startstreaming} startstreaming + ${counts.endstreaming} endstreaming = ${streamingEvents} media-state transitions delivered to the UIProcess in a few seconds. Pre-fix that is one system notification each. Post-fix: 0 or 1 per 10s window — 1 when the window closes with the loop on the startstreaming side, 0 when it closes on the endstreaming side, because the flush then republishes the already-published value and the equality check at the top of notifyMediaStreamingActivity drops it.`);
+    if (streamingEvents !== 2 * iterations)
+        verdict('info', `Case 2: expected ${2 * iterations} transitions but saw ${streamingEvents}.`);
+}
+
+async function guard(work) {
+    if (running) {
+        logLine('busy');
+        return;
+    }
+    running = true;
+    for (const button of document.querySelectorAll('button'))
+        button.disabled = true;
+    try {
+        await work();
+    } catch (error) {
+        logLine(`ABORTED: ${error}`);
+        verdict('buggy', `Aborted: ${error.message || error}`);
+    } finally {
+        running = false;
+        for (const button of document.querySelectorAll('button'))
+            button.disabled = false;
+    }
+}
+
+function iterations() {
+    return parseInt(document.getElementById('iterations').value, 10) || 20;
+}
+
+function reset() {
+    document.getElementById('verdicts').textContent = '';
+    document.getElementById('log').textContent = '';
+    caseCounts[1] = null;
+    caseCounts[2] = null;
+    renderCounters();
+    if (!window.ManagedMediaSource) {
+        verdict('buggy', 'ManagedMediaSource is not available: this page cannot generate the notification traffic.');
+        return false;
+    }
+    return true;
+}
+
+document.getElementById('case1Button').addEventListener('click', () => guard(async () => {
+    if (reset())
+        await case1(iterations());
+}));
+document.getElementById('case2Button').addEventListener('click', () => guard(async () => {
+    if (reset())
+        await case2(iterations());
+}));
+document.getElementById('bothButton').addEventListener('click', () => guard(async () => {
+    if (!reset())
+        return;
+    await case1(iterations());
+    await case2(iterations());
+}));
+
+window.addEventListener('load', () => {
+    renderCounters();
+    const params = new URLSearchParams(location.search);
+    if (params.has('n'))
+        document.getElementById('iterations').value = params.get('n');
+    const run = params.get('run');
+    if (!run)
+        return;
+    guard(async () => {
+        if (!reset())
+            return;
+        if (run === '1' || run === 'both')
+            await case1(iterations());
+        if (run === '2' || run === 'both')
+            await case2(iterations());
+    });
+});
+</script>
+</body>
+</html>
