@@ -1,0 +1,21 @@
+{
+    "comment": "Video-only fragmented bipbop, one track, constant 400x300 with no resolution change. Segment list and codec taken from bipbop_dash.mpd in this directory: SegmentList timescale=90000 duration=69043, so 0.767144444s per segment and 9.972877778s over 13 segments. Unlike the manifests under tests/content/ this one names a file per segment instead of byte ranges into a single asset, because the content ships as separate init and .m4s files.",
+    "type": "video/mp4; codecs=\"avc1.4d4015\"",
+    "duration": 9.972877778,
+    "init": "bipbop_videoinit.mp4",
+    "media": [
+        { "url": "bipbop_video1.m4s",  "timestamp": 0.000000000, "duration": 0.767144444 },
+        { "url": "bipbop_video2.m4s",  "timestamp": 0.767144444, "duration": 0.767144444 },
+        { "url": "bipbop_video3.m4s",  "timestamp": 1.534288889, "duration": 0.767144444 },
+        { "url": "bipbop_video4.m4s",  "timestamp": 2.301433333, "duration": 0.767144444 },
+        { "url": "bipbop_video5.m4s",  "timestamp": 3.068577778, "duration": 0.767144444 },
+        { "url": "bipbop_video6.m4s",  "timestamp": 3.835722222, "duration": 0.767144444 },
+        { "url": "bipbop_video7.m4s",  "timestamp": 4.602866667, "duration": 0.767144444 },
+        { "url": "bipbop_video8.m4s",  "timestamp": 5.370011111, "duration": 0.767144444 },
+        { "url": "bipbop_video9.m4s",  "timestamp": 6.137155556, "duration": 0.767144444 },
+        { "url": "bipbop_video10.m4s", "timestamp": 6.904300000, "duration": 0.767144444 },
+        { "url": "bipbop_video11.m4s", "timestamp": 7.671444444, "duration": 0.767144444 },
+        { "url": "bipbop_video12.m4s", "timestamp": 8.438588889, "duration": 0.767144444 },
+        { "url": "bipbop_video13.m4s", "timestamp": 9.205733333, "duration": 0.767144444 }
+    ]
+}

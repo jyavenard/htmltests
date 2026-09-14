@@ -18,35 +18,56 @@
     .verdict.buggy { border-color: #c00; background: #fff0f0; }
     .verdict.info { border-color: #48c; background: #f0f6ff; }
     #log { font: 11px monospace; background: #f7f7f7; padding: 8px; height: 320px; overflow: auto; white-space: pre; }
+    #mmsBanner:not(:empty) { font: 13px monospace; max-width: 62em; padding: 6px 8px; margin: 8px 0; border-left: 4px solid #e90; background: #fffaf0; }
     p.note { max-width: 62em; font-size: 13px; }
 </style>
-<script src="media-source-loader.js"></script>
 </head>
 <body>
 
 <h1>ManagedMediaSource seek storms</h1>
 
 <p class="note">
-Repro page for <a href="https://commits.webkit.org/319847@main">319847@main</a> (bug 322488,
-<code>cab391584f80</code>). Each <code>startstreaming</code>/<code>endstreaming</code> event reported
-below is one media-state transition delivered from WebCore to the UIProcess and on to the
-NetworkProcess, with no coalescing in between:
-<code>ManagedMediaSource::setStreaming</code> → <code>HasStreamingActivity</code> →
-<code>WebProcessProxy::updateMediaStreamingActivity</code>.
+<strong>Case 1 is the shape the reporting site actually has</strong>, and the one to run first. It
+plays to the end, and from its <code>ended</code> listener it seeks to a duration it holds in its own
+database, about <code>1e-8</code> longer than the one we compute from the media. Step 6 of the seek
+algorithm clamps that away, so the seek starts from a position already in ended playback and
+transitions into nothing. Pre-fix WebKit still runs a full seek — <code>HTMLMediaElement::seekTask</code>'s
+same-position short circuit is bypassed whenever a MediaSource is attached — which clears
+<code>m_sentEndEvent</code> and fires <code>ended</code> again, re-entering the site's listener.
+Unbounded, about 2500 iterations per second on the real page.
 </p>
 
+<p class="note">
+Case 2 is the same seek in isolation, driven from a paused element rather than from playback. It
+aims past <code>duration</code> for the same reason case 1 does: a seek <em>to</em>
+<code>video.duration</code> cannot reach end of media unless duration is representable at
+<code>MediaTime::DefaultTimeScale</code>, because the target arrives as a <code>DoubleValue</code>
+that <code>std::min</code> keeps on equality and <code>computeSeekTime</code> then rounds to
+<code>1/10000000</code>. Case 3 is unrelated to end of media — it is the buffered/unbuffered churn
+that exercises the NetworkProcess notification rate limiter. Each
+<code>startstreaming</code>/<code>endstreaming</code> event reported below is one media-state
+transition delivered from WebCore to the UIProcess and on to the NetworkProcess, with no coalescing
+in between: <code>ManagedMediaSource::setStreaming</code> → <code>HasStreamingActivity</code> →
+<code>WebProcessProxy::updateMediaStreamingActivity</code>. See
+<a href="https://commits.webkit.org/319847@main">319847@main</a> (bug 322488, <code>cab391584f80</code>).
+</p>
+
+<div id="mmsBanner"></div>
+
 <div id="controls">
-    Iterations: <input id="iterations" type="number" value="20" min="1" max="500" style="width: 5em">
-    <button id="case1Button">Case 1: seek to end</button>
-    <button id="case2Button">Case 2: buffered &harr; unbuffered</button>
-    <button id="bothButton">Run both</button>
+    Iterations: <input id="iterations" type="number" value="5000" min="1" max="100000" style="width: 6em">
+    <label><input id="logging" type="checkbox"> Log</label>
+    <button id="case1Button">Case 1: play to end, seek from ended</button>
+    <button id="case2Button">Case 2: seek past end</button>
+    <button id="case3Button">Case 3: buffered &harr; unbuffered</button>
+    <button id="bothButton">Run all</button>
 </div>
 
 <video controls></video>
 
 <h2>Counters</h2>
 <table id="counters">
-    <tr><th>event</th><th>case 1</th><th>case 2</th></tr>
+    <tr><th>event</th><th>case 1</th><th>case 2</th><th>case 3</th></tr>
 </table>
 <div id="verdicts"></div>
 
@@ -61,45 +82,67 @@ gate — so full page-visible churn with no notifications at all means something
 <pre id="log"></pre>
 
 <script>
-// Same content and fallback order as media/media-source/media-managedmse-no-streaming-toggle-at-end.html,
-// the layout test added with the fix. Single-track audio: duration comes from the one track the seek
-// resolves against, so seeking to duration lands on duration.
-const MANIFESTS = [
-    'content/test-opus-manifest.json',
-    'content/test-vorbis-manifest.json',
-    'content/test-48khz-manifest.json',
-    'content/test-xhe-aac-manifest.json',
-];
+// Video-only, single track, matching the ad video the reporting site plays. Single track matters:
+// duration comes from the one track the seek resolves against, so seeking to duration lands on
+// duration. Video-only also means the element can autoplay without a user gesture.
+// Video-only fragmented bipbop, matching the ad video the reporting site plays: one track, constant
+// 400x300 with no resolution change anywhere in it, so nothing in the run is attributable to a
+// codec-config change. Single track matters because duration comes from the one track the seek
+// resolves against, so seeking to duration lands on duration. Video-only also means the element can
+// autoplay without a user gesture.
+//
+// Read in place rather than copied here. The manifest names a file per segment, so it cannot be fed
+// to media-source-loader.js, which slices byte ranges out of one asset.
+const MANIFEST = '../mediatest/fragmented/bipbop_video-manifest.json';
 
-// Case 2 needs the buffering policy satisfiable without the source being ended, which takes more
+// The end-of-media cases trim the append to this. Video frames are indivisible, so the buffered
+// range ends at the last frame boundary at or before the window rather than exactly on it — which is
+// fine, because duration is then pinned to whatever that buffered end turned out to be.
+const APPEND_WINDOW_END = 4.5;
+
+// How far past duration case 1 aims. It matches what the reporting site does: its stored duration is
+// about 1e-8 longer than the one we compute, which is far below any media timescale, so step 6 of
+// the seek algorithm clamps it away and currentTime can never equal the requested value.
+const DURATION_OVERSHOOT = 1e-8;
+
+// Case 1 starts playback this far from the end, so a run costs a fraction of a second rather than
+// the whole asset, and treats this long without an 'ended' as the loop having terminated.
+const CASE1_PREROLL = 0.3;
+const CASE1_QUIET = 750;
+
+// Case 3 needs the buffering policy satisfiable without the source being ended, which takes more
 // than ManagedMediaSourceHighThreshold (30s) of contiguous data ahead of the seek target:
 // ManagedMediaSource::monitorSourceBuffers only clamps limitAhead() to duration once ended.
 // No asset here holds that much in one run — test-opus.webm spans 90s but its media stops at 10s
-// and resumes at 80s — so the range is built from CASE2_PASSES copies of the opening
-// CASE2_PASS_LENGTH seconds.
-const CASE2_PASS_LENGTH = 9.5;
-const CASE2_PASSES = 5;
-const CASE2_BUFFERED_TARGET = 1;
+// and resumes at 80s — so the range is built from CASE3_PASSES copies of the opening
+// CASE3_PASS_LENGTH seconds.
+const CASE3_PASS_LENGTH = 9.5;
+const CASE3_PASSES = 5;
+const CASE3_BUFFERED_TARGET = 1;
 // Seconds left buffered ahead of the other target. Under ManagedMediaSourceLowThreshold (10s), so
 // the algorithm asks for more data, while staying inside the buffered range so the seek completes
 // without needing any.
-const CASE2_REMAINING_AHEAD = 2;
-
-// Both cases trim the append to a round number of seconds. Audio samples are divisible, so
-// SourceBufferPrivate splits the sample straddling appendWindowEnd and the buffered range ends
-// exactly there. A value this coarse survives the seek path unchanged, which case 1 needs: its two
-// defects and the fix for them all hinge on currentTime reaching duration exactly.
-const CASE1_APPEND_WINDOW_END = 4.5;
+const CASE3_REMAINING_AHEAD = 2;
 
 const TIMEOUT = 5000;
-const COUNTED_EVENTS = ['startstreaming', 'endstreaming', 'ended', 'seeking', 'seeked', 'waiting'];
+
+// ManagedMediaSource carries the buffering policy and the startstreaming/endstreaming events; plain
+// MediaSource has neither. Without it the seek shapes still run and the seeking/seeked/ended/waiting
+// counters still mean what they say — only the streaming half of each case is unobservable.
+const HAS_MMS = !!window.ManagedMediaSource;
+const SourceCtor = HAS_MMS ? window.ManagedMediaSource : window.MediaSource;
+const STREAMING_EVENTS = HAS_MMS ? ['startstreaming', 'endstreaming'] : [];
+const COUNTED_EVENTS = [...STREAMING_EVENTS, 'ended', 'seeking', 'seeked', 'waiting'];
 
 let video;
 let source;
 let sourceBuffer;
 let running = false;
+// Sampled from the Log checkbox once per run. Off by default: at the default iteration count the
+// per-event lines dominate, and each one costs a streamingState() string build plus a DOM append.
+let logEvents = false;
 const counters = {};
-const caseCounts = { 1: null, 2: null };
+const caseCounts = { 1: null, 2: null, 3: null };
 
 function pad(value, width) {
     return String(value).padStart(width, '0');
@@ -122,7 +165,7 @@ function renderCounters() {
     for (const name of COUNTED_EVENTS) {
         const row = table.insertRow();
         row.insertCell().textContent = name;
-        for (const which of [1, 2])
+        for (const which of [1, 2, 3])
             row.insertCell().textContent = caseCounts[which] ? caseCounts[which][name] : '-';
     }
 }
@@ -188,47 +231,71 @@ function drainEvents() {
 // Every input ManagedMediaSource::monitorSourceBuffers reads, so a run that does not toggle as
 // expected shows which branch it took.
 function streamingState() {
-    return `streaming=${source.streaming} activeSourceBuffers=${source.activeSourceBuffers.length}`
+    return `streaming=${HAS_MMS ? source.streaming : 'n/a'} activeSourceBuffers=${source.activeSourceBuffers.length}`
         + ` sourceReadyState=${source.readyState} currentTime=${video.currentTime}`
         + ` duration=${video.duration} readyState=${video.readyState}`
         + ` buffered=${rangesToString(sourceBuffer.buffered)}`;
 }
 
+// Per-event logging, the only output gated by the Log checkbox. Everything else — setup, start, end
+// and verdict lines — is logged unconditionally, since it is a handful of lines per run.
 function logStreamingEvents() {
-    for (const name of ['startstreaming', 'endstreaming'])
-        source.addEventListener(name, () => logLine(`  ${name}: ${streamingState()}`));
-}
-
-function loaderPromise(loader) {
-    return new Promise((resolve, reject) => {
-        loader.onload = resolve;
-        loader.onerror = () => reject(new Error('failed to load manifest or media data'));
-    });
-}
-
-// Returns the first manifest whose type ManagedMediaSource supports and whose duration is at least
-// `minimumDuration`.
-async function pickLoader(minimumDuration) {
-    for (const manifest of MANIFESTS) {
-        const loader = new MediaSourceLoader(manifest);
-        try {
-            await loaderPromise(loader);
-        } catch (error) {
-            logLine(`LOAD: ${manifest} unavailable (${error.message})`);
-            continue;
-        }
-        if (!ManagedMediaSource.isTypeSupported(loader.type())) {
-            logLine(`LOAD: ${manifest} type '${loader.type()}' unsupported`);
-            continue;
-        }
-        if (loader.duration() < minimumDuration) {
-            logLine(`LOAD: ${manifest} is only ${loader.duration()}s, needs ${minimumDuration}s`);
-            continue;
-        }
-        logLine(`LOAD: using ${manifest}, type '${loader.type()}', duration ${loader.duration()}s, ${loader.mediaSegmentsLength()} segments`);
-        return loader;
+    for (const name of STREAMING_EVENTS) {
+        source.addEventListener(name, () => {
+            if (logEvents)
+                logLine(`  ${name}: ${streamingState()}`);
+        });
     }
-    return null;
+}
+
+async function fetchBuffer(url) {
+    const response = await fetch(url);
+    if (!response.ok)
+        throw new Error(`${url}: HTTP ${response.status}`);
+    return response.arrayBuffer();
+}
+
+// Exposes the same surface media-source-loader.js does, over a manifest that names a file per
+// segment. Everything is fetched up front so an append never waits on the network.
+async function loadContent() {
+    const response = await fetch(MANIFEST);
+    if (!response.ok)
+        throw new Error(`${MANIFEST}: HTTP ${response.status}`);
+    const manifest = await response.json();
+    const base = MANIFEST.slice(0, MANIFEST.lastIndexOf('/') + 1);
+    const [init, ...segments] = await Promise.all([
+        fetchBuffer(base + manifest.init),
+        ...manifest.media.map(entry => fetchBuffer(base + entry.url)),
+    ]);
+    return {
+        type: () => manifest.type,
+        duration: () => manifest.duration,
+        initSegment: () => init,
+        mediaSegmentsLength: () => segments.length,
+        mediaSegment: index => segments[index],
+        mediaSegmentEndTime: index => manifest.media[index].timestamp + manifest.media[index].duration,
+    };
+}
+
+// Returns the loader if the content is usable and long enough, otherwise null.
+async function pickLoader(minimumDuration) {
+    let loader;
+    try {
+        loader = await loadContent();
+    } catch (error) {
+        logLine(`LOAD: ${error.message}`);
+        return null;
+    }
+    if (!SourceCtor.isTypeSupported(loader.type())) {
+        logLine(`LOAD: '${loader.type()}' unsupported`);
+        return null;
+    }
+    if (loader.duration() < minimumDuration) {
+        logLine(`LOAD: content is only ${loader.duration()}s, needs ${minimumDuration}s`);
+        return null;
+    }
+    logLine(`LOAD: ${MANIFEST}, type '${loader.type()}', duration ${loader.duration()}s, ${loader.mediaSegmentsLength()} segments`);
+    return loader;
 }
 
 async function appendBuffer(buffer) {
@@ -237,8 +304,8 @@ async function appendBuffer(buffer) {
     await updated;
 }
 
-// Replaces the media element and attaches a fresh ManagedMediaSource with `loader`'s init segment
-// appended. Leaves the source open with no media data.
+// Replaces the media element and attaches a fresh source with `loader`'s init segment appended.
+// Leaves the source open with no media data.
 async function attach(loader) {
     for (const name of COUNTED_EVENTS)
         counters[name] = 0;
@@ -247,12 +314,12 @@ async function attach(loader) {
     video = document.createElement('video');
     video.controls = true;
     // ManagedMediaSource refuses to attach without either an AirPlay alternative source or the
-    // Remote Playback API explicitly disabled.
+    // Remote Playback API explicitly disabled. Harmless for plain MediaSource.
     video.disableRemotePlayback = true;
     oldVideo.replaceWith(video);
 
-    source = new ManagedMediaSource();
-    countEvents(source, ['startstreaming', 'endstreaming']);
+    source = new SourceCtor();
+    countEvents(source, STREAMING_EVENTS);
     countEvents(video, ['ended', 'seeking', 'seeked', 'waiting']);
     video.addEventListener('error', () => logLine(`ERROR: video error ${video.error && video.error.message}`));
 
@@ -264,9 +331,10 @@ async function attach(loader) {
 }
 
 // Drives `streaming` to false and parks currentTime on `target`, so a case starts from a known
-// state. `target` must satisfy the buffering policy.
+// state. `target` must satisfy the buffering policy. Without ManagedMediaSource there is no
+// streaming state to settle, so this only parks the playhead.
 async function settle(target) {
-    const stopped = source.streaming ? waitFor(source, 'endstreaming') : Promise.resolve();
+    const stopped = HAS_MMS && source.streaming ? waitFor(source, 'endstreaming') : Promise.resolve();
     const seeked = waitFor(video, 'seeked');
     video.currentTime = target;
     await Promise.all([seeked, stopped]);
@@ -274,77 +342,251 @@ async function settle(target) {
 }
 
 // Seeks to `target`, which must be inside the buffered range, and waits for both the seek and the
-// streaming event the buffering policy owes at that position.
+// streaming event the buffering policy owes at that position. Without ManagedMediaSource no such
+// event is owed, so it waits on the seek alone. Records which of the two settled, because either can
+// be the one that hangs and they mean very different things.
 async function seekAwaitingStreaming(iteration, target, event) {
-    const streamingEvent = waitFor(source, event);
+    const streamingEvent = HAS_MMS ? waitFor(source, event) : Promise.resolve();
     const seeked = waitFor(video, 'seeked');
+    let seekSettled = false;
+    let streamingSettled = false;
+    const ignore = () => { };
+    seeked.then(() => { seekSettled = true; }, ignore);
+    streamingEvent.then(() => { streamingSettled = true; }, ignore);
     video.currentTime = target;
     try {
         await Promise.all([seeked, streamingEvent]);
     } catch (error) {
-        throw new Error(`iteration ${iteration} seeking to ${target.toFixed(3)} awaiting '${event}': ${error.message}. ${streamingState()} networkState=${video.networkState} seeking=${video.seeking}`);
+        const pending = [!seekSettled ? "'seeked'" : null, !streamingSettled ? `'${event}'` : null].filter(Boolean).join(' and ');
+        throw new Error(`iteration ${iteration} seeking to ${target.toFixed(3)}: ${error.message}, still waiting on ${pending}. ${streamingState()} networkState=${video.networkState} seeking=${video.seeking}`);
     }
 }
 
-// Case 1: repeatedly seek to duration on an ended ManagedMediaSource.
-//
-// Two independent defects are visible here. monitorSourceBuffers had no end-of-media early exit, so
-// each seek flipped streaming true then false; and seekTask cleared m_sentEndEvent on every seek, so
-// 'ended' fired again each time. Both counts are reported separately.
-async function case1(iterations) {
-    const loader = await pickLoader(0);
-    if (!loader) {
-        verdict('buggy', 'No supported manifest: case 1 cannot run.');
+// Reports the streaming half of a case, or explains why there is nothing to report.
+function reportStreamingVerdict(name, counts, iterations) {
+    if (!HAS_MMS) {
+        verdict('info', `${name} streaming SKIPPED: ManagedMediaSource is unavailable, so there is no startstreaming/endstreaming to count. The seek shape still ran and every other counter is valid.`);
         return;
+    }
+    const streamingEvents = counts.startstreaming + counts.endstreaming;
+    if (!streamingEvents)
+        verdict('fixed', `${name} streaming FIXED: ${counts.seeked} seeks produced 0 streaming events. A pre-fix build produces ${2 * iterations}.`);
+    else
+        verdict('buggy', `${name} streaming BUG PRESENT: ${counts.startstreaming} startstreaming + ${counts.endstreaming} endstreaming over ${counts.seeked} seeks.`);
+}
+
+// A note on step 11 of the seek algorithm says setting the current playback position "can
+// immediately trigger other conditions, such as the rules regarding when playback reaches the end of
+// the media resource" — so a seek to the end does fire 'ended'. What it must not do is re-fire it on
+// a seek that starts from the end, because the position never transitions into ended playback.
+// See https://github.com/whatwg/html/issues/2885. Firefox fires none at all, which is a deviation.
+function reportEndedVerdict(name, counts, iterations) {
+    if (counts.ended === 1)
+        verdict('fixed', `${name} ended FIXED: 'ended' fired once over ${counts.seeked} seeks — on the first seek, the only one that transitions into ended playback. A pre-fix WebKit fires it ${iterations} times.`);
+    else if (!counts.ended)
+        verdict('info', `${name} ended: no 'ended' at all over ${counts.seeked} seeks. The first seek does transition into ended playback and owes one. Firefox behaves this way.`);
+    else
+        verdict('buggy', `${name} ended BUG PRESENT: 'ended' fired ${counts.ended} times over ${counts.seeked} seeks. Only the first seek transitions into ended playback; a seek that starts from the end must not re-fire it.`);
+}
+
+// Shared setup for the two end-of-media cases: media appended up to APPEND_WINDOW_END, duration
+// pinned to the buffered end, source ended, playhead parked at 0.
+async function setupEndedSource(name) {
+    const loader = await pickLoader(APPEND_WINDOW_END);
+    if (!loader) {
+        verdict('buggy', `No supported manifest of at least ${APPEND_WINDOW_END}s: ${name} cannot run.`);
+        return false;
     }
     await attach(loader);
 
-    sourceBuffer.appendWindowEnd = CASE1_APPEND_WINDOW_END;
-    await appendBuffer(loader.mediaSegment(0));
+    // Segment lengths vary by manifest — one 10s run for the webm assets, ten 1s fragments for the
+    // mp4 — so append until the window is covered rather than assuming one segment is enough.
+    sourceBuffer.appendWindowEnd = APPEND_WINDOW_END;
+    for (let i = 0; i < loader.mediaSegmentsLength(); i++) {
+        await appendBuffer(loader.mediaSegment(i));
+        if (loader.mediaSegmentEndTime(i) >= APPEND_WINDOW_END)
+            break;
+    }
+    if (!sourceBuffer.buffered.length) {
+        verdict('buggy', `${name} cannot run: nothing buffered after appending up to ${APPEND_WINDOW_END}s.`);
+        return false;
+    }
     source.duration = sourceBuffer.buffered.end(0);
     await waitFor(video, 'durationchange').catch(() => { });
     source.endOfStream();
-    logLine(`CASE 1 SETUP: ${streamingState()}`);
-    if (video.duration !== CASE1_APPEND_WINDOW_END)
-        verdict('info', `Case 1: duration is ${video.duration}, not the requested ${CASE1_APPEND_WINDOW_END}. The append window did not trim the last sample, so currentTime may not reach duration exactly.`);
+    logLine(`${name} SETUP: ${streamingState()}`);
+    // The defects and the fixes for them all hinge on currentTime reaching duration exactly, which
+    // holds however the window fell, because duration is the buffered end. Reported only so the run
+    // records which frame boundary it landed on.
+    if (video.duration !== APPEND_WINDOW_END)
+        logLine(`${name} SETUP: duration is ${video.duration}, the last frame boundary at or before the ${APPEND_WINDOW_END}s append window.`);
     await settle(0);
+    return true;
+}
+
+// Case 1: the reporting site's actual shape. Play to the end, then seek from inside the 'ended'
+// handler to the duration the site holds in its own database, slightly longer than the one we
+// compute.
+//
+// The first 'ended' is owed: playback reached the end. The seek that follows clamps to duration and
+// starts from a position already in ended playback, so it transitions into nothing and must not fire
+// 'ended' again. Pre-fix WebKit clears m_sentEndEvent on every full seek and fires it, re-entering
+// the site's handler — unbounded, about 2500 iterations per second on the real page. Capped here.
+async function case1(iterations) {
+    if (!await setupEndedSource('Case 1'))
+        return;
+
+    const target = video.duration + DURATION_OVERSHOOT;
+    if (!(target > video.duration)) {
+        verdict('buggy', `Case 1 cannot run: duration ${video.duration} + ${DURATION_OVERSHOOT} is not a larger double. Raise DURATION_OVERSHOOT.`);
+        return;
+    }
+
+    // Start near the end so the run is short. Not muted: these assets are audio-only, and muting
+    // changes which renderers drive the clock. play() therefore needs the user gesture from the
+    // button — the ?run= path reports the rejection rather than working around it.
+    const prerollFrom = Math.max(0, video.duration - CASE1_PREROLL);
+    await settle(prerollFrom);
 
     const before = snapshot();
-    logLine(`CASE 1 START: ${iterations} seeks to duration (${video.duration})`);
-    for (let i = 0; i < iterations; i++) {
-        const seeked = waitFor(video, 'seeked');
-        video.currentTime = video.duration;
-        await seeked;
+    logLine(`CASE 1 START: play from ${prerollFrom} to end, then seek to ${target} from the 'ended' handler, capped at ${iterations}`);
+
+    let seeksFromEnded = 0;
+    let settleRun;
+    const quiet = new Promise(resolve => { settleRun = resolve; });
+    let quietTimer;
+    const armQuiet = () => {
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(settleRun, CASE1_QUIET);
+    };
+    const onEnded = () => {
+        if (seeksFromEnded >= iterations) {
+            settleRun();
+            return;
+        }
+        seeksFromEnded++;
+        video.currentTime = target;
+        armQuiet();
+    };
+    // Playback progressing counts as activity, so the quiet window measures the loop going silent
+    // rather than the time it takes to reach the end.
+    let lastProgress = video.currentTime;
+    let progressTicks = 0;
+    const onProgress = () => {
+        lastProgress = video.currentTime;
+        progressTicks++;
+        armQuiet();
+    };
+    // A 'pause' before we stop the run ourselves means the engine stopped playback; record where.
+    let enginePauses = 0;
+    let firstPauseAt = null;
+    const onPause = () => {
+        enginePauses++;
+        if (firstPauseAt === null)
+            firstPauseAt = video.currentTime;
+    };
+    video.addEventListener('ended', onEnded);
+    video.addEventListener('timeupdate', onProgress);
+    video.addEventListener('pause', onPause);
+
+    const detach = () => {
+        video.removeEventListener('ended', onEnded);
+        video.removeEventListener('timeupdate', onProgress);
+        video.removeEventListener('pause', onPause);
+    };
+
+    try {
+        await video.play();
+    } catch (error) {
+        detach();
+        clearTimeout(quietTimer);
+        verdict('buggy', `Case 1 cannot run: play() rejected (${error.message || error}). Use the button rather than ?run= so the call carries a user gesture.`);
+        return;
     }
+
+    // Only start the countdown once playback has begun; arming it before play() lets startup
+    // latency consume the window.
+    armQuiet();
+    await quiet;
+    clearTimeout(quietTimer);
+    const pausedWhenQuiet = video.paused;
+    const seekingWhenQuiet = video.seeking;
+    detach();
+    video.pause();
 
     await drainEvents();
     const counts = delta(before);
     caseCounts[1] = counts;
     renderCounters();
-    logLine(`CASE 1 END: currentTime=${video.currentTime} duration=${video.duration} ended=${video.ended} streaming=${source.streaming}`);
+    logLine(`CASE 1 END: currentTime=${video.currentTime} duration=${video.duration} target=${target} seeksFromEnded=${seeksFromEnded} ended=${video.ended} streaming=${HAS_MMS ? source.streaming : 'n/a'}`);
+
+    if (!counts.ended) {
+        verdict('buggy', `Case 1 SETUP FAILED: playback never fired 'ended', so the loop never started. It began at ${prerollFrom} and stopped at ${lastProgress}, short of duration ${video.duration}, after ${progressTicks} timeupdate(s). paused=${pausedWhenQuiet} seeking=${seekingWhenQuiet} readyState=${video.readyState} networkState=${video.networkState} waiting=${counts.waiting} pauseEvents=${enginePauses}${firstPauseAt === null ? '' : ` firstPauseAt=${firstPauseAt}`} error=${video.error ? video.error.message : 'none'} buffered=${rangesToString(sourceBuffer.buffered)}.`);
+        return;
+    }
+    if (counts.ended === 1)
+        verdict('fixed', `Case 1 ended FIXED: 'ended' fired once — for the playback that reached the end. The ${seeksFromEnded} seek(s) back to ${target} did not re-fire it, so the site's handler never re-entered and the loop terminated.`);
+    else
+        verdict('buggy', `Case 1 ended BUG PRESENT: 'ended' fired ${counts.ended} times, re-entering the site's handler ${seeksFromEnded} times. Only the playback that reached the end owed one; the loop is capped at ${iterations} here and is unbounded on the real page.`);
+
+    // The comparison figure is the iteration cap, not the seeks this run happened to make: on a
+    // fixed build there is exactly one, which would understate what a pre-fix build does.
+    reportStreamingVerdict('Case 1', counts, iterations);
+}
+
+// Case 2: repeatedly seek past duration on an ended source, from a paused element — case 1's seek
+// with the 'ended' handler taken out of the loop, so the seek is counted on its own.
+//
+// It aims past duration rather than at it for the same reason the site does, though the site does it
+// by accident. Seeking to video.duration cannot reach end of media unless duration happens to be
+// representable at MediaTime::DefaultTimeScale: the target arrives as a DoubleValue MediaTime,
+// std::min(time, durationMediaTime()) returns it unchanged on equality, and computeSeekTime then
+// rounds it to 1/10000000 — short of duration. Overshooting makes std::min return the precise
+// rational duration instead, which carries no double value, so nothing rounds it.
+//
+// Two independent defects are visible once the position does reach the end. monitorSourceBuffers had
+// no end-of-media early exit, so each seek flipped streaming true then false; and seekTask cleared
+// m_sentEndEvent on every seek, so 'ended' fired again each time. Both counts are reported separately.
+async function case2(iterations) {
+    if (!await setupEndedSource('Case 2'))
+        return;
+
+    const target = video.duration + DURATION_OVERSHOOT;
+    if (!(target > video.duration)) {
+        verdict('buggy', `Case 2 cannot run: duration ${video.duration} + ${DURATION_OVERSHOOT} is not a larger double. Raise DURATION_OVERSHOOT.`);
+        return;
+    }
+
+    const before = snapshot();
+    logLine(`CASE 2 START: ${iterations} seeks to ${target} — duration ${video.duration} overshot by ${DURATION_OVERSHOOT}`);
+    for (let i = 0; i < iterations; i++) {
+        const seeked = waitFor(video, 'seeked');
+        video.currentTime = target;
+        await seeked;
+    }
+
+    await drainEvents();
+    const counts = delta(before);
+    caseCounts[2] = counts;
+    renderCounters();
+    logLine(`CASE 2 END: currentTime=${video.currentTime} duration=${video.duration} target=${target} ended=${video.ended} streaming=${HAS_MMS ? source.streaming : 'n/a'}`);
 
     if (counts.seeked !== iterations)
-        verdict('info', `Case 1: only ${counts.seeked} of ${iterations} seeks completed.`);
+        verdict('info', `Case 2: only ${counts.seeked} of ${iterations} seeks completed.`);
 
     // Both defects need the playback position to reach duration. If the seek lands short, neither
     // the buggy path nor the fixed path runs and the counts below mean nothing.
-    if (video.currentTime < video.duration)
-        verdict('buggy', `Case 1 SETUP FAILED: after seeking to duration, currentTime is ${video.currentTime}, short of duration ${video.duration}. The position never reaches end of media, so this run tests neither the defect nor the fix.`);
+    if (video.currentTime < video.duration) {
+        verdict('buggy', `Case 2 SETUP FAILED: after seeking to ${target}, currentTime is ${video.currentTime}, ${(video.duration - video.currentTime).toExponential(3)}s short of duration ${video.duration}. The position never reaches end of media, so this run tests neither the defect nor the fix.`);
+        return;
+    }
 
-    const streamingEvents = counts.startstreaming + counts.endstreaming;
-    if (!streamingEvents)
-        verdict('fixed', `Case 1 streaming FIXED: ${counts.seeked} seeks to duration produced 0 streaming events. A pre-fix build produces ${2 * iterations}.`);
-    else
-        verdict('buggy', `Case 1 streaming BUG PRESENT: ${counts.startstreaming} startstreaming + ${counts.endstreaming} endstreaming over ${counts.seeked} seeks.`);
-
-    if (counts.ended === 1)
-        verdict('fixed', `Case 1 ended FIXED: 'ended' fired once over ${counts.seeked} seeks. A pre-fix build fires it ${iterations} times.`);
-    else
-        verdict('buggy', `Case 1 ended BUG PRESENT: 'ended' fired ${counts.ended} times over ${counts.seeked} seeks.`);
+    reportStreamingVerdict('Case 2', counts, iterations);
+    reportEndedVerdict('Case 2', counts, iterations);
 }
 
-// Case 2: alternate between a seek that leaves less than the low threshold buffered ahead and a seek
-// back into a zone that satisfies the high threshold.
+// Case 3: alternate between a seek that leaves less than the low threshold buffered ahead and a seek
+// back into a zone that satisfies the high threshold. Nothing to do with end of media.
 //
 // Both targets sit inside the buffered range, so both seeks complete on their own and the loop never
 // waits on a seek that needs data to arrive. The source stays open, so monitorSourceBuffers does not
@@ -352,65 +594,70 @@ async function case1(iterations) {
 // [target, target + 10s] is not buffered, and the return leg fires endstreaming because
 // [target, target + 30s] is. The churn is correct behaviour and stays page-visible; only the
 // NetworkProcess rate-limits the resulting notifications, which JS cannot observe.
-async function case2(iterations) {
-    const loader = await pickLoader(CASE2_PASS_LENGTH);
+async function case3(iterations) {
+    const loader = await pickLoader(CASE3_PASS_LENGTH);
     if (!loader) {
-        verdict('buggy', `No supported manifest of at least ${CASE2_PASS_LENGTH}s: case 2 cannot run.`);
+        verdict('buggy', `No supported manifest of at least ${CASE3_PASS_LENGTH}s: case 3 cannot run.`);
         return;
     }
     await attach(loader);
 
-    // None of these assets holds 30s in one contiguous run, so build one: append the opening
-    // CASE2_PASS_LENGTH seconds repeatedly, each pass offset to start where the previous one ended.
-    // appendWindowEnd trims the straddling audio sample exactly, so the passes join without a gap
-    // and the buffered range ends on a round number.
-    for (let pass = 0; pass < CASE2_PASSES; pass++) {
-        sourceBuffer.timestampOffset = pass * CASE2_PASS_LENGTH;
-        sourceBuffer.appendWindowEnd = (pass + 1) * CASE2_PASS_LENGTH;
+    // The content is only ~10s, so build a 30s+ run: append the opening CASE3_PASS_LENGTH seconds
+    // repeatedly, each pass offset to start where the previous one ended. appendWindowEnd lands on a
+    // frame boundary rather than exactly on the pass length, but the remainder is one frame at most,
+    // well under the fudge factor, so the passes coalesce into one range.
+    for (let pass = 0; pass < CASE3_PASSES; pass++) {
+        sourceBuffer.timestampOffset = pass * CASE3_PASS_LENGTH;
+        sourceBuffer.appendWindowEnd = (pass + 1) * CASE3_PASS_LENGTH;
         for (let i = 0; i < loader.mediaSegmentsLength(); i++) {
-            if (i && loader.mediaSegmentEndTime(i - 1) >= CASE2_PASS_LENGTH)
+            if (i && loader.mediaSegmentEndTime(i - 1) >= CASE3_PASS_LENGTH)
                 break;
             await appendBuffer(loader.mediaSegment(i));
         }
-        logLine(`CASE 2 SETUP: pass ${pass + 1}/${CASE2_PASSES}, buffered=${rangesToString(sourceBuffer.buffered)}`);
+        logLine(`CASE 3 SETUP: pass ${pass + 1}/${CASE3_PASSES}, buffered=${rangesToString(sourceBuffer.buffered)}`);
     }
-    source.duration = CASE2_PASS_LENGTH * CASE2_PASSES + 20;
-    logLine(`CASE 2 SETUP: ${streamingState()}`);
+    source.duration = CASE3_PASS_LENGTH * CASE3_PASSES + 20;
+    logLine(`CASE 3 SETUP: ${streamingState()}`);
 
     if (sourceBuffer.buffered.length !== 1) {
         verdict('buggy', `Expected one contiguous buffered range, got ${rangesToString(sourceBuffer.buffered)}.`);
         return;
     }
     const bufferedEnd = sourceBuffer.buffered.end(0);
-    if (bufferedEnd < CASE2_BUFFERED_TARGET + 31) {
-        verdict('buggy', `Only ${bufferedEnd.toFixed(3)}s buffered: not enough to satisfy the 30s policy ahead of ${CASE2_BUFFERED_TARGET}s.`);
+    if (bufferedEnd < CASE3_BUFFERED_TARGET + 31) {
+        verdict('buggy', `Only ${bufferedEnd.toFixed(3)}s buffered: not enough to satisfy the 30s policy ahead of ${CASE3_BUFFERED_TARGET}s.`);
         return;
     }
-    const nearEndTarget = bufferedEnd - CASE2_REMAINING_AHEAD;
-    if (nearEndTarget <= CASE2_BUFFERED_TARGET) {
-        verdict('buggy', `Near-end target ${nearEndTarget.toFixed(3)} is not past the buffered target ${CASE2_BUFFERED_TARGET}.`);
+    const nearEndTarget = bufferedEnd - CASE3_REMAINING_AHEAD;
+    if (nearEndTarget <= CASE3_BUFFERED_TARGET) {
+        verdict('buggy', `Near-end target ${nearEndTarget.toFixed(3)} is not past the buffered target ${CASE3_BUFFERED_TARGET}.`);
         return;
     }
-    await settle(CASE2_BUFFERED_TARGET);
+    await settle(CASE3_BUFFERED_TARGET);
 
     const before = snapshot();
-    logLine(`CASE 2 START: ${iterations} round trips between ${nearEndTarget.toFixed(3)} (${CASE2_REMAINING_AHEAD}s buffered ahead) and ${CASE2_BUFFERED_TARGET} (${(bufferedEnd - CASE2_BUFFERED_TARGET).toFixed(3)}s ahead)`);
+    logLine(`CASE 3 START: ${iterations} round trips between ${nearEndTarget.toFixed(3)} (${CASE3_REMAINING_AHEAD}s buffered ahead) and ${CASE3_BUFFERED_TARGET} (${(bufferedEnd - CASE3_BUFFERED_TARGET).toFixed(3)}s ahead)`);
 
     for (let i = 0; i < iterations; i++) {
         await seekAwaitingStreaming(i, nearEndTarget, 'startstreaming');
-        await seekAwaitingStreaming(i, CASE2_BUFFERED_TARGET, 'endstreaming');
+        await seekAwaitingStreaming(i, CASE3_BUFFERED_TARGET, 'endstreaming');
     }
 
     await drainEvents();
     const counts = delta(before);
-    caseCounts[2] = counts;
+    caseCounts[3] = counts;
     renderCounters();
-    logLine(`CASE 2 END: currentTime=${video.currentTime} streaming=${source.streaming}`);
+    logLine(`CASE 3 END: currentTime=${video.currentTime} streaming=${HAS_MMS ? source.streaming : 'n/a'}`);
+
+    if (!HAS_MMS) {
+        verdict('info', `Case 3 streaming SKIPPED: ManagedMediaSource is unavailable, so the buffering policy this case exists to exercise is not running. The ${counts.seeked} seeks completed, but nothing here measures notification traffic.`);
+        return;
+    }
 
     const streamingEvents = counts.startstreaming + counts.endstreaming;
-    verdict('info', `Case 2: ${counts.startstreaming} startstreaming + ${counts.endstreaming} endstreaming = ${streamingEvents} media-state transitions delivered to the UIProcess in a few seconds. Pre-fix that is one system notification each. Post-fix: 0 or 1 per 10s window — 1 when the window closes with the loop on the startstreaming side, 0 when it closes on the endstreaming side, because the flush then republishes the already-published value and the equality check at the top of notifyMediaStreamingActivity drops it.`);
+    verdict('info', `Case 3: ${counts.startstreaming} startstreaming + ${counts.endstreaming} endstreaming = ${streamingEvents} media-state transitions delivered to the UIProcess in a few seconds. Pre-fix that is one system notification each. Post-fix: 0 or 1 per 10s window — 1 when the window closes with the loop on the startstreaming side, 0 when it closes on the endstreaming side, because the flush then republishes the already-published value and the equality check at the top of notifyMediaStreamingActivity drops it.`);
     if (streamingEvents !== 2 * iterations)
-        verdict('info', `Case 2: expected ${2 * iterations} transitions but saw ${streamingEvents}.`);
+        verdict('info', `Case 3: expected ${2 * iterations} transitions but saw ${streamingEvents}.`);
 }
 
 async function guard(work) {
@@ -419,6 +666,7 @@ async function guard(work) {
         return;
     }
     running = true;
+    logEvents = document.getElementById('logging').checked;
     for (const button of document.querySelectorAll('button'))
         button.disabled = true;
     try {
@@ -434,7 +682,7 @@ async function guard(work) {
 }
 
 function iterations() {
-    return parseInt(document.getElementById('iterations').value, 10) || 20;
+    return parseInt(document.getElementById('iterations').value, 10) || 5000;
 }
 
 function reset() {
@@ -442,31 +690,35 @@ function reset() {
     document.getElementById('log').textContent = '';
     caseCounts[1] = null;
     caseCounts[2] = null;
+    caseCounts[3] = null;
     renderCounters();
-    if (!window.ManagedMediaSource) {
-        verdict('buggy', 'ManagedMediaSource is not available: this page cannot generate the notification traffic.');
-        return false;
-    }
-    return true;
+    if (!HAS_MMS)
+        verdict('info', 'ManagedMediaSource is not enabled: falling back to MediaSource. The seek shapes still run and the ended/seeking/seeked/waiting counters are valid, but there is no startstreaming/endstreaming to count and nothing here measures notification traffic.');
 }
 
 document.getElementById('case1Button').addEventListener('click', () => guard(async () => {
-    if (reset())
-        await case1(iterations());
+    reset();
+    await case1(iterations());
 }));
 document.getElementById('case2Button').addEventListener('click', () => guard(async () => {
-    if (reset())
-        await case2(iterations());
+    reset();
+    await case2(iterations());
+}));
+document.getElementById('case3Button').addEventListener('click', () => guard(async () => {
+    reset();
+    await case3(iterations());
 }));
 document.getElementById('bothButton').addEventListener('click', () => guard(async () => {
-    if (!reset())
-        return;
+    reset();
     await case1(iterations());
     await case2(iterations());
+    await case3(iterations());
 }));
 
 window.addEventListener('load', () => {
     renderCounters();
+    if (!HAS_MMS)
+        document.getElementById('mmsBanner').textContent = 'ManagedMediaSource is not enabled in this browser. The page runs against MediaSource instead: every seek shape still runs, but startstreaming/endstreaming cannot be observed and case 3 measures nothing.';
     const params = new URLSearchParams(location.search);
     if (params.has('n'))
         document.getElementById('iterations').value = params.get('n');
@@ -474,12 +726,15 @@ window.addEventListener('load', () => {
     if (!run)
         return;
     guard(async () => {
-        if (!reset())
-            return;
-        if (run === '1' || run === 'both')
+        reset();
+        // 'both' predates the later cases and still means every case.
+        const all = run === 'all' || run === 'both';
+        if (run === '1' || all)
             await case1(iterations());
-        if (run === '2' || run === 'both')
+        if (run === '2' || all)
             await case2(iterations());
+        if (run === '3' || all)
+            await case3(iterations());
     });
 });
 </script>
